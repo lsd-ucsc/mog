@@ -131,6 +131,22 @@ _testInst10 = Refl :: Inst (Prim Int % Ø ↦ Prim String % Ø)
 _testInst20 = Refl :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
             :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
 
+type PairSchema a =
+    Schema "pair"
+    ( Table "map" (Prim Bool % Ø ↦ Prim a % Ø)
+    & TablesEnd
+    )
+testInst25 = Refl :: Inst (PairSchema a)
+            :~: Map (Bool :% TTupleEnd) (a :% TTupleEnd) :& TTablesEnd
+
+type TwopleSchema a b =
+    Schema "twople"
+    ( Table "singleton" (Ø ↦ Prim a % Prim b % Ø)
+    & TablesEnd
+    )
+testInst26 = Refl :: Inst (TwopleSchema a b)
+            :~: Map TTupleEnd (a :% b :% TTupleEnd) :& TTablesEnd
+
 type QueueSchema a =
     Schema "queue"
     ( Table "ob" (Ref (Prim a % Ø) 'Here % Ref (Prim a % Ø) 'Here % Ø ↦ Ø)
