@@ -1,14 +1,11 @@
 {-# OPTIONS_GHC "-Wno-missing-signatures" #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators #-}
+
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleInstances #-}
--- {-# LANGUAGE FlexibleContexts #-}
--- {-# LANGUAGE UndecidableInstances #-} -- "nested type families"
 {-# LANGUAGE ScopedTypeVariables, TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+
 -- | Git backend for MOG
 module Backend where
 
@@ -237,6 +234,13 @@ instance Serialise a => OutCol (Prim a) where
 
 instance OutCols fk => OutCol (Ref fk index) where
     outCol Proxy = Output.Ref . outCols @fk Proxy
+
+_testOutput10 = Refl :: Output (QueueSchema a)
+            :~: ( String
+                ,    (String, Map Output.Row Output.Row)
+                  :& (String, Map Output.Row Output.Row)
+                  :& TTablesEnd
+                )
 
 
 
