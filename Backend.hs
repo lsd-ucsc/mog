@@ -75,8 +75,9 @@ data Index = Here | There Index
 data Ref fk (index :: Index)
 data Prim a
 
-_testPrec10 :: Int & Char % Word % () ↦ String % Float % () & Double & () :~: Int & (((Char % (Word % ())) ↦ (String % (Float % ()))) & (Double & ()))
-_testPrec10 = Refl -- This isn't a correct use of these symbols; this test only looks at precedence.
+-- This isn't a correct use of these symbols; this test only looks at precedence.
+_testPrec10 = Refl :: Int & Char % Word % () ↦ String % Float % () & Double
+            :~: Int & (((Char % (Word % ())) ↦ (String % (Float % ()))) & Double)
 
 ---- TODO: instances to constrain to valid schemas
 ----
@@ -105,60 +106,63 @@ type family Col c :: * where
 
 -- | Convert a tuple schema to an instance of that tuple (using a hetlist).
 type family Cols c :: * where
-    Cols ()       = ()
+    Cols Ø        = TTupleEnd
     Cols (c % cs) = Col c :% Cols cs
---  Cols (Prim a   % cs) =      a  :% Cols cs
---  Cols (Ref fk _ % cs) = Cols fk :% Cols cs -- XXX undecidableinstances
 
-_testCols10 = Refl :: Cols (Prim Char % ())
-            :~: (Char :% ())
-_testCols20 = Refl :: Cols (Ref (Prim Char % ()) 'Here % ())
-            :~: ((Char :% ()) :% ())
-_testCols30 = Refl :: Cols (Prim Int % Ref (Prim Char % Prim Word % ()) 'Here % Prim Double % ())
-            :~: Int :% (Char :% Word :% ()) :% Double :% ()
-_testCols31 = Refl :: Cols (Prim Int % Ref (Prim Char % Prim Word % ()) 'Here % Prim Double % ())
-            :~: Int :% (Char :% Word :% ()) :% Double :% ()
+_testCols10 = Refl :: Cols (Prim Char % Ø)
+            :~: (Char :% TTupleEnd)
+_testCols20 = Refl :: Cols (Ref (Prim Char % Ø) 'Here % Ø)
+            :~: ((Char :% TTupleEnd) :% TTupleEnd)
+_testCols30 = Refl :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+            :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
+_testCols31 = Refl :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+            :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
 
 -- | Compute the type of an instance of a database schema.
 type family Inst a :: * where
     Inst (Schema name ts)  = Inst ts
     Inst (t & ts)          = Inst t :& Inst ts
-    Inst TablesEnd         = ()
+    Inst TablesEnd         = TTablesEnd
     Inst (Table name pk_v) = Inst pk_v
     Inst (pk ↦ v)          = Map (Cols pk) (Cols v)
 
-_testInst10 = Refl :: Inst (Prim Int % () ↦ Prim String % ())
-            :~: Map (Int :% ()) (String :% ())
-_testInst20 = Refl :: Inst (Table "teble" (Prim Int % () ↦ Prim String % ()))
-            :~: Map (Int :% ()) (String :% ())
+_testInst10 = Refl :: Inst (Prim Int % Ø ↦ Prim String % Ø)
+            :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
+_testInst20 = Refl :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
+            :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
 
 type QueueSchema a =
     Schema "queue"
-    ( Table "ob" (Ref (Prim a % ()) 'Here % Ref (Prim a % ()) 'Here % () ↦ ())
-    & Table "mem" (Prim a % () ↦ ())
+    ( Table "ob" (Ref (Prim a % Ø) 'Here % Ref (Prim a % Ø) 'Here % Ø ↦ Ø)
+    & Table "mem" (Prim a % Ø ↦ Ø)
     & TablesEnd
     )
 _testInst30 = Refl :: Inst (QueueSchema a)
-            :~: Map ((a :% ()) :% (a :% ()) :% ()) () :& Map (a :% ()) () :& ()
+            :~: Map ((a :% TTupleEnd) :% (a :% TTupleEnd) :% TTupleEnd) TTupleEnd
+            :& Map (a :% TTupleEnd) TTupleEnd
+            :& TTablesEnd
 
 queueExample :: Inst (QueueSchema Int)
 queueExample =
-        fromList [((4 :% ()) :% (2 :% ()) :% ()), ((5 :% ()) :% (4 :% ()) :% ())]
-    :&  fromList [2 :% (), 4 :% (), 5 :% ()]
-    :&  ()
+        fromList [((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd), ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd)]
+    :&  fromList [2 :% TTupleEnd, 4 :% TTupleEnd, 5 :% TTupleEnd]
+    :&  TTablesEnd
   where
-    fromList :: Ord a => [a] -> Map a ()
-    fromList = Map.fromSet (const ()) . Set.fromList
+    fromList :: Ord a => [a] -> Map a TTupleEnd
+    fromList = Map.fromSet (const TTupleEnd) . Set.fromList
 
 type OrderedMapSchema k v =
     Schema "ordered-map"
-    ( Table "ord" (Ref (Prim k % ()) ('There 'Here) % Ref (Prim k % ()) ('There 'Here) % () ↦ ())
-    & Table "map" (Ref (Prim k % ()) 'Here % () ↦ Prim v % ())
-    & Table "keys" (Prim k % () ↦ ())
+    ( Table "ord" (Ref (Prim k % Ø) ('There 'Here) % Ref (Prim k % Ø) ('There 'Here) % Ø ↦ Ø)
+    & Table "map" (Ref (Prim k % Ø) 'Here % Ø ↦ Prim v % Ø)
+    & Table "keys" (Prim k % Ø ↦ Ø)
     & TablesEnd
     )
 _testInst40 = Refl :: Inst (OrderedMapSchema k v)
-            :~: Map ((k :% ()) :% (k :% ()) :% ()) () :& Map ((k :% ()) :% ()) (v :% ()) :& Map (k :% ()) () :& ()
+            :~: Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd) TTupleEnd
+            :& Map ((k :% TTupleEnd) :% TTupleEnd) (v :% TTupleEnd)
+            :& Map (k :% TTupleEnd) TTupleEnd
+            :& TTablesEnd
 
 class Out a where
     type Output a :: *
@@ -186,8 +190,8 @@ instance (Out t, Out ts) => Out (t & ts) where
     out Proxy (x :& xs) = out @t Proxy x :& out @ts Proxy xs
 
 instance Out TablesEnd where
-    type Output TablesEnd = ()
-    out Proxy () = ()
+    type Output TablesEnd = TTablesEnd
+    out Proxy TTablesEnd = TTablesEnd
 
 -- Process the table and return a tuple containing its name.
 instance (Out pk_v, KnownSymbol name) => Out (Table name pk_v) where
@@ -200,18 +204,14 @@ instance (OutCols pk, OutCols v) => Out (pk ↦ v) where
         = Map.mapWithKey (\k -> mappend k . outCols @v Proxy)
         . Map.mapKeys (outCols @pk Proxy)
 
--- Make a typeclass for 'Cols a -> Row' and maybe something for Col
-
--- (Output pk) (Output pk :+++++: Output v)
-
 class OutCols a where
     outCols :: Proxy a -> Cols a -> Output.Row
 
 instance (OutCol c, OutCols cs) => OutCols (c % cs) where
     outCols Proxy (c :% cs) = outCol @c Proxy c : outCols @cs Proxy cs
 
-instance OutCols () where
-    outCols Proxy () = []
+instance OutCols Ø where
+    outCols Proxy TTupleEnd = []
 
 class OutCol a where
     outCol :: Proxy a -> Col a -> Output.Col
