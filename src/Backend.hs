@@ -224,6 +224,20 @@ instance List t TTablesEnd where
 
 --output :: Proxy a -> Inst a -> Output a
 --output Proxy (String, xs) = _
+orderedMapExample :: Inst (OrderedMapSchema Char Int)
+orderedMapExample =
+           fromList [ ('a' :% TTupleEnd) :% ('b' :% TTupleEnd) :% TTupleEnd
+                    , ('b' :% TTupleEnd) :% ('c' :% TTupleEnd) :% TTupleEnd
+                    ]
+    :& Map.fromList [ (('a' :% TTupleEnd) :% TTupleEnd, 123 :% TTupleEnd)
+                    , (('b' :% TTupleEnd) :% TTupleEnd, 456 :% TTupleEnd)
+                    , (('c' :% TTupleEnd) :% TTupleEnd, 789 :% TTupleEnd)
+                    ]
+    :&     fromList [ 'a' :% TTupleEnd, 'b' :% TTupleEnd, 'c' :% TTupleEnd ]
+    :& TTablesEnd
+  where
+    fromList :: Ord a => [a] -> Map a TTupleEnd
+    fromList = Map.fromSet (const TTupleEnd) . Set.fromList
 
 
 class ToSchema a where
