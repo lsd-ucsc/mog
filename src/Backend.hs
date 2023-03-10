@@ -17,59 +17,16 @@ import Data.Map (Map)
 import Data.Proxy (Proxy(..))
 -- import Data.Set (Set)
 import Data.Type.Equality ((:~:)(..))
-import GHC.TypeLits (Symbol, KnownSymbol, symbolVal)
+
+import GHC.TypeLits (KnownSymbol, symbolVal)
 import Terms
+import Mog.Schema
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Output
 -- import qualified Codec.Serialise as S
 -- import qualified Git as G
-
---- -- Column
---- --  Type
---- --      Data-type or (Index of a previous table)
---- --  Value
---- --      Data-value or (Value of Pk type from the previous table)
---- {-
---- data Col : Type_1 where
----     Prim : Type → Col
----     Ref : Index → Col
---- 
---- data Field : (c : Col) → Type where
----     prim : ∀{T} → T → Field (Prim T)
----     ref : ∀{ix} → RawFilePath → Field (Ref ix)
---- -}
---- 
---- -- Row is a het-list of col.
---- {-
---- data Row : Type_1 where
----     (:%:) : Col → Row → Row
----     () : Row
---- -}
-
-infixr 5 &
-infix  6 ↦
-infixr 7 %
-
-data Schema (name :: Symbol) tables -- ^ Table-group wrapper
-data t & ts -- ^ Table-group cons
-data TablesEnd -- ^ Table-group nil
-
-data Table (name :: Symbol) pk_v -- ^ Table (one) wrapper
-data pk ↦ v -- ^ Table (one) spec
-
-data c % cs -- ^ Tuple cons
-data Ø -- ^ Tuple nil
-
-data Index = Here | There Index
-data Ref fk (index :: Index)
-data Prim a
-
--- This isn't a correct use of these symbols; this test only looks at precedence.
-_testPrec10 = Refl
-           :: Int & Char % Word % () ↦ String % Float % () & Double
-          :~: Int & (((Char % (Word % ())) ↦ (String % (Float % ()))) & Double)
 
 ---- TODO: instances to constrain to valid schemas
 ----

@@ -8,7 +8,7 @@ import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import Backend (Index(..))
+import Mog.Schema (Index(..))
 
 -- type PkRel pk tuple = PkTable pk tuple
 
