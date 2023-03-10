@@ -6,6 +6,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
+
 -- | Git backend for MOG
 module Backend where
 
@@ -151,6 +153,77 @@ _testInst40 = Refl
                      TTupleEnd
               :& TTablesEnd
 
+-- Second pass; the input is 'Output a' instead of 'Inst a'
+class Out2 a where
+    type Output2 a :: *
+    out2 :: Proxy a -> Output a -> Output2 a
+
+-- Bypass the top layer
+instance ( Output2 ts ~ [(String, Output.Table)]
+         , Out2 ts ) => Out2 (Schema name ts) where
+    type Output2 (Schema name ts) = (String, Output.Schema)
+    out2 Proxy (name, xs) = (name, Map.fromList $ out2 @ts Proxy xs)
+
+-- Convert to a list
+instance ( Output  t  ~  (String, Output.Table)
+         , Output2 ts ~ [(String, Output.Table)]
+         , Out2 ts ) => Out2 (t & ts) where
+    type Output2 (t & ts) = [(String, Output.Table)]
+    out2 Proxy (x :& xs) = x : out2 @ts Proxy xs
+
+instance Out2 TablesEnd where
+    type Output2 TablesEnd = [(String, Output.Table)]
+    out2 Proxy TTablesEnd = []
+
+-- class List a where
+--     type Element a :: *
+--     list :: a -> [Element a]
+-- 
+-- instance {-# OVERLAPS #-} (List ts, t ~ Element ts) => List (t :& ts) where
+--     type Element (t :& ts) = t
+--     list (t :& ts) = t : list ts
+-- 
+-- instance List (t :& TTablesEnd) where
+--     type Element (t :& TTablesEnd) = t
+--     list (t :& TTablesEnd) = t : []
+
+class List x xs where
+    list :: xs -> [x]
+
+instance List t ts => List t (t :& ts) where
+    list (t :& ts) = t : list ts
+
+instance List t TTablesEnd where
+    list TTablesEnd = []
+
+--
+--instance List TablesEnd where
+--    type Element TablesEnd = _
+--    list TablesEnd = []
+
+-- class TableList a where
+--     tableList :: Proxy a -> Output a -> [(String, Output.Table)]
+-- 
+-- instance (TableList ts, Output t ~ (String, Output.Table)) => TableList (t & ts) where
+--     tableList Proxy (x :& xs) = x : tableList @ts Proxy xs
+-- 
+-- instance TableList TablesEnd where
+--     tableList Proxy TTablesEnd = []
+
+--class TableList a where
+--    type Element a :: *
+--    tableList :: a -> [Element a]
+--
+--instance (TableList ts, t ~ Element ts) => TableList (t :& ts) where
+--    type Element (t :& ts) = t
+--    tableList (t :& ts) = t : tableList ts
+--
+--instance TableList TTableEnd where
+--    type Element
+
+
+--output :: Proxy a -> Inst a -> Output a
+--output Proxy (String, xs) = _
 
 
 class ToSchema a where
