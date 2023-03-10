@@ -116,8 +116,11 @@ _testInst30 = Refl
 
 queueExample :: Inst (QueueSchema Int)
 queueExample =
-       fromList [((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd), ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd)]
-    :& fromList [2 :% TTupleEnd, 4 :% TTupleEnd, 5 :% TTupleEnd]
+       fromList [ ((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd)
+                , ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd) ]
+    :& fromList [ 2 :% TTupleEnd
+                , 4 :% TTupleEnd
+                , 5 :% TTupleEnd ]
     :& TTablesEnd
   where
     fromList :: Ord a => [a] -> Map a TTupleEnd
@@ -125,18 +128,28 @@ queueExample =
 
 type OrderedMapSchema k v =
     Schema "ordered-map"
-    ( Table "ord" (Ref (Prim k % Ø) ('There 'Here) % Ref (Prim k % Ø) ('There 'Here) % Ø ↦ Ø)
-    & Table "map" (Ref (Prim k % Ø) 'Here % Ø ↦ Prim v % Ø)
-    & Table "keys" (Prim k % Ø ↦ Ø)
+    ( Table "ord" ( Ref (Prim k % Ø) ('There 'Here)
+                  % Ref (Prim k % Ø) ('There 'Here)
+                  % Ø
+                  ↦ Ø )
+    & Table "map" ( Ref (Prim k % Ø) 'Here
+                  % Ø
+                  ↦ Prim v
+                  % Ø)
+    & Table "keys" ( Prim k
+                   % Ø
+                   ↦ Ø)
     & TablesEnd
     )
 _testInst40 = Refl
            :: Inst (OrderedMapSchema k v)
-          :~:    Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd) TTupleEnd
-              :& Map ((k :% TTupleEnd) :% TTupleEnd) (v :% TTupleEnd)
-              :& Map (k :% TTupleEnd) TTupleEnd
+          :~:    Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd)
+                     TTupleEnd
+              :& Map ((k :% TTupleEnd) :% TTupleEnd)
+                     (v :% TTupleEnd)
+              :& Map (k :% TTupleEnd)
+                     TTupleEnd
               :& TTablesEnd
-
 
 
 
