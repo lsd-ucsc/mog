@@ -12,6 +12,7 @@ module Backend where
 
 import Codec.Serialise (Serialise, serialise)
 -- import Crypto.Hash (hash, Digest, SHA1)
+import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Proxy (Proxy(..))
 -- import Data.Set (Set)
@@ -87,16 +88,16 @@ _testPrec10 = Refl
 ---- class                                       Tbl table                   tables where
 ---- instance (Pk pk tuple, Fks tuple tables) => Tbl (PkTable name pk tuple) tables where
 
----- type family as %++ bs :: * where
+---- type family as %++ bs :: Type where
 ----     ()        %++ bs = bs
 ----     (a :% as) %++ bs = a :% (as %++ bs)
 
-type family Col c :: * where
+type family Col c :: Type where
     Col (Prim a)   = a
     Col (Ref fk _) = Cols fk
 
 -- | Convert a tuple schema to an instance of that tuple (using a hetlist).
-type family Cols c :: * where
+type family Cols c :: Type where
     Cols Ø        = TTupleEnd
     Cols (c % cs) = Col c :% Cols cs
 
@@ -114,7 +115,7 @@ _testCols31 = Refl
           :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
 
 -- | Compute the type of an instance of a database schema.
-type family Inst a :: * where
+type family Inst a :: Type where
     Inst (Schema name ts)  = Inst ts
     Inst (t & ts)          = Inst t :& Inst ts
     Inst TablesEnd         = TTablesEnd
@@ -182,7 +183,7 @@ _testInst40 = Refl
               :& TTablesEnd
 
 class Out a where
-    type Output a :: *
+    type Output a :: Type
     out :: Proxy a -> Inst a -> Output a
 
 -- Yield an anonymous 'Output.Schema' for an instance of a datatype schema.

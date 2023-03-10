@@ -1,5 +1,10 @@
 {-# LANGUAGE TypeOperators #-}
-module Terms where
+module Terms (
+  (:&)(..),
+  (:%)(..),
+  TTablesEnd(..),
+  TTupleEnd(..)
+) where
 
 infixr 5 :&
 infixr 7 :%
