@@ -22,11 +22,11 @@ import GHC.TypeLits (KnownSymbol, symbolVal)
 import Terms
 import Mog.Schema
 
+-- import qualified Codec.Serialise as S
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Output
--- import qualified Codec.Serialise as S
 -- import qualified Git as G
+import qualified Output
 
 ---- TODO: instances to constrain to valid schemas
 ----
@@ -45,43 +45,41 @@ import qualified Output
 ---- class                                       Tbl table                   tables where
 ---- instance (Pk pk tuple, Fks tuple tables) => Tbl (PkTable name pk tuple) tables where
 
----- type family as %++ bs :: Type where
-----     ()        %++ bs = bs
-----     (a :% as) %++ bs = a :% (as %++ bs)
-
-type family Col c :: Type where
-    Col (Prim a)   = a
-    Col (Ref fk _) = Cols fk
-
--- | Convert a tuple schema to an instance of that tuple (using a hetlist).
-type family Cols c :: Type where
-    Cols Ø        = TTupleEnd
-    Cols (c % cs) = Col c :% Cols cs
-
-_testCols10 = Refl
-           :: Cols (Prim Char % Ø)
-          :~: (Char :% TTupleEnd)
-_testCols20 = Refl
-           :: Cols (Ref (Prim Char % Ø) 'Here % Ø)
-          :~: ((Char :% TTupleEnd) :% TTupleEnd)
-_testCols30 = Refl
-           :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
-_testCols31 = Refl
-           :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
-
 -- | Compute the type of an instance of a database schema.
 type family Inst a :: Type where
+    -- An instance of a schema consists of an instance for each of its tables.
     Inst (Schema name ts)  = Inst ts
     Inst (t & ts)          = Inst t :& Inst ts
     Inst TablesEnd         = TTablesEnd
+
+    -- An instance of a table consists of a map from instances of its key columns
+    -- to instances of its value columns.
     Inst (Table name pk_v) = Inst pk_v
-    Inst (pk ↦ v)          = Map (Cols pk) (Cols v)
+    Inst (pk ↦ v)          = Map (Inst pk) (Inst v)
+
+    -- An instance of a list of columns is an instance for each column.
+    Inst (c % cs)          = Inst c :% Inst cs
+    Inst Ø                 = TTupleEnd
+
+    -- An instance of a primitive column is an instance of its type.
+    Inst (Prim a)          = a
+    -- An instance of a foreign key is an instance of the columns
+    -- constituting the key for the referenced table.
+    Inst (Ref fk _)        = Inst fk
+
 
 _testInst10 = Refl
-           :: Inst (Prim Int % Ø ↦ Prim String % Ø)
-          :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
+           :: Inst (Prim Char % Ø)
+          :~: (Char :% TTupleEnd)
+_testInst11 = Refl
+           :: Inst (Ref (Prim Char % Ø) 'Here % Ø)
+          :~: ((Char :% TTupleEnd) :% TTupleEnd)
+_testInst12 = Refl
+           :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
+_testInst13 = Refl
+           :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
 _testInst20 = Refl
            :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
           :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
@@ -139,75 +137,43 @@ _testInst40 = Refl
               :& Map (k :% TTupleEnd) TTupleEnd
               :& TTablesEnd
 
-class Out a where
-    type Output a :: Type
-    out :: Proxy a -> Inst a -> Output a
-
--- Yield an anonymous 'Output.Schema' for an instance of a datatype schema.
--- Except currently we don't do that; we return a hetlist of table pairs.
--- TODO: somewhere we need to wrap it with a map
-instance (Out ts, KnownSymbol name) => Out (Schema name ts) where
-    type Output (Schema name ts) = (String, Output ts)
-    out Proxy x = (symbolVal @name Proxy, out @ts Proxy x)
-
--- TODO: think about whether this would work later; the main question is
--- whether the equality constraint works; also there's some weirdness with
--- unioning the maps
----- instance (Out t, Out ts, Output t ~ Output ts) => Out (t & ts) where
-----     type Output (t & ts) = Map String () -- ...  (Output t) ... (Output ts)
-----     out Proxy (t :& ts) = _
-
--- Map 'out' over each table.
---
--- TODO: you need to put them in a 'Map' later.
-instance (Out t, Out ts) => Out (t & ts) where
-    type Output (t & ts) = Output t :& Output ts
-    out Proxy (x :& xs) = out @t Proxy x :& out @ts Proxy xs
-
-instance Out TablesEnd where
-    type Output TablesEnd = TTablesEnd
-    out Proxy TTablesEnd = TTablesEnd
-
--- Process the table and return a tuple containing its name.
-instance (Out pk_v, KnownSymbol name) => Out (Table name pk_v) where
-    type Output (Table name pk_v) = (String, Output pk_v)
-    out Proxy x = (symbolVal @name Proxy, out @pk_v Proxy x)
-
-instance (OutCols pk, OutCols v) => Out (pk ↦ v) where
-    type Output (pk ↦ v) = Map Output.Row Output.Row
-    out Proxy
-        = Map.mapWithKey (\k -> mappend k . outCols @v Proxy)
-        . Map.mapKeys (outCols @pk Proxy)
-
-
-class OutCols a where
-    outCols :: Proxy a -> Cols a -> Output.Row
-class OutCol a where
-    outCol  :: Proxy a -> Col  a -> Output.Col
-
-instance (OutCol c, OutCols cs) => OutCols (c % cs) where
-    outCols Proxy (c :% cs) = outCol @c Proxy c : outCols @cs Proxy cs
-
-instance OutCols Ø where
-    outCols Proxy TTupleEnd = []
-
-instance Serialise a => OutCol (Prim a) where
-    outCol Proxy = Output.Prim . serialise
-
-instance OutCols fk => OutCol (Ref fk index) where
-    outCol Proxy = Output.Ref . outCols @fk Proxy
-
-_testOutput10 = Refl
-             :: Output (QueueSchema a)
-            :~: ( String
-                ,    (String, Map Output.Row Output.Row)
-                  :& (String, Map Output.Row Output.Row)
-                  :& TTablesEnd
-                )
 
 
 
+class ToSchema a where
+    toSchema :: Proxy a -> Inst a -> (String, Output.Schema)
+instance (ToTables ts, KnownSymbol name) => ToSchema (Schema name ts) where
+    toSchema Proxy x = (symbolVal @name Proxy, Map.fromList (toTables @ts Proxy x))
 
+class ToTables x where
+    toTables :: Proxy x -> Inst x -> [(String, Output.Table)]
+instance (ToTable t, ToTables ts) => ToTables (t & ts) where
+    toTables Proxy (x :& xs) = toTable @t Proxy x : toTables @ts Proxy xs
+
+class ToTable x where
+    toTable :: Proxy x -> Inst x -> (String, Output.Table)
+instance (ToColumns pk_v, KnownSymbol name) => ToTable (Table name pk_v) where
+    toTable Proxy x = (symbolVal @name Proxy, toColumns @pk_v Proxy x)
+
+class ToColumns x where
+    toColumns :: Proxy x -> Inst x -> Output.Table
+instance (ToFields pk, ToFields v) => ToColumns (pk ↦ v) where
+    toColumns Proxy = Map.mapWithKey (\k -> mappend k . toFields @v Proxy)
+                    . Map.mapKeys (toFields @pk Proxy)
+
+class ToFields a where
+    toFields :: Proxy a -> Inst a -> Output.Row
+instance (ToField c, ToFields cs) => ToFields (c % cs) where
+    toFields Proxy (c :% cs) = toField @c Proxy c : toFields @cs Proxy cs
+instance ToFields Ø where
+    toFields Proxy TTupleEnd = []
+
+class ToField a where
+    toField  :: Proxy a -> Inst a -> Output.Col
+instance (Serialise a) => ToField (Prim a) where
+    toField Proxy = Output.Prim . serialise
+instance (ToFields fk) => ToField (Ref fk index) where
+    toField Proxy = Output.Ref . toFields @fk Proxy
 
 
 
