@@ -149,6 +149,8 @@ class ToTables x where
     toTables :: Proxy x -> Inst x -> [(String, Output.Table)]
 instance (ToTable t, ToTables ts) => ToTables (t & ts) where
     toTables Proxy (x :& xs) = toTable @t Proxy x : toTables @ts Proxy xs
+instance ToTables TablesEnd where
+    toTables Proxy TTablesEnd = []
 
 class ToTable x where
     toTable :: Proxy x -> Inst x -> (String, Output.Table)
