@@ -6,7 +6,7 @@ homepage:            https://github.com/lsd-ucsc/mog
 license:             BSD3
 author:
   - Jonathan Castello <jcaste14@ucsc.edu>
-  - Patrick Redmond   <plredmond@ucsc.edu>
+  - Patrick Redmond   <https://recurse.social/@redmp>
 extra-source-files:
   - README.md
   - CHANGELOG.md
