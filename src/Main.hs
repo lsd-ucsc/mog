@@ -35,7 +35,7 @@ import Codec.Serialise
     , deserialiseOrFail
     )
 
-import MOG
+import Mog
 import Example
 
 main :: IO ()

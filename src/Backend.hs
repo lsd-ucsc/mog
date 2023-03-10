@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC "-Wno-missing-signatures" #-}
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
@@ -21,14 +20,13 @@ import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(..))
 
 import GHC.TypeLits (KnownSymbol, symbolVal)
-import Terms
 import Mog.Schema
 
 -- import qualified Codec.Serialise as S
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 -- import qualified Git as G
-import qualified Output
+-- import qualified Output
 
 ---- TODO: instances to constrain to valid schemas
 ----
@@ -47,164 +45,11 @@ import qualified Output
 ---- class                                       Tbl table                   tables where
 ---- instance (Pk pk tuple, Fks tuple tables) => Tbl (PkTable name pk tuple) tables where
 
--- | Compute the type of an instance of a database schema.
-type family Inst a :: Type where
-    -- An instance of a schema consists of an instance for each of its tables.
-    Inst (Schema name ts)  = Inst ts
-    Inst (t & ts)          = Inst t :& Inst ts
-    Inst TablesEnd         = TTablesEnd
-
-    -- An instance of a table consists of a map from instances of its key columns
-    -- to instances of its value columns.
-    Inst (Table name pk_v) = Inst pk_v
-    Inst (pk ↦ v)          = Map (Inst pk) (Inst v)
-
-    -- An instance of a list of columns is an instance for each column.
-    Inst (c % cs)          = Inst c :% Inst cs
-    Inst Ø                 = TTupleEnd
-
-    -- An instance of a primitive column is an instance of its type.
-    Inst (Prim a)          = a
-    -- An instance of a foreign key is an instance of the columns
-    -- constituting the key for the referenced table.
-    Inst (Ref fk _)        = Inst fk
 
 
-_testInst10 = Refl
-           :: Inst (Prim Char % Ø)
-          :~: (Char :% TTupleEnd)
-_testInst11 = Refl
-           :: Inst (Ref (Prim Char % Ø) 'Here % Ø)
-          :~: ((Char :% TTupleEnd) :% TTupleEnd)
-_testInst12 = Refl
-           :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
-_testInst13 = Refl
-           :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
-_testInst20 = Refl
-           :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
-          :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
-
-type PairSchema a =
-    Schema "pair"
-    ( Table "map" (Prim Bool % Ø ↦ Prim a % Ø)
-    & TablesEnd
-    )
-_testInst25 = Refl
-           :: Inst (PairSchema a)
-          :~: Map (Bool :% TTupleEnd) (a :% TTupleEnd) :& TTablesEnd
-
-type TwopleSchema a b =
-    Schema "twople"
-    ( Table "singleton" (Ø ↦ Prim a % Prim b % Ø)
-    & TablesEnd
-    )
-_testInst26 = Refl
-           :: Inst (TwopleSchema a b)
-          :~: Map TTupleEnd (a :% b :% TTupleEnd) :& TTablesEnd
-
-type QueueSchema a =
-    Schema "queue"
-    ( Table "ob" (Ref (Prim a % Ø) 'Here % Ref (Prim a % Ø) 'Here % Ø ↦ Ø)
-    & Table "mem" (Prim a % Ø ↦ Ø)
-    & TablesEnd
-    )
-_testInst30 = Refl
-           :: Inst (QueueSchema a)
-          :~:   Map ((a :% TTupleEnd) :% (a :% TTupleEnd) :% TTupleEnd) TTupleEnd
-             :& Map (a :% TTupleEnd) TTupleEnd
-             :& TTablesEnd
-
-queueExample :: Inst (QueueSchema Int)
-queueExample =
-       fromList [ ((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd)
-                , ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd) ]
-    :& fromList [ 2 :% TTupleEnd
-                , 4 :% TTupleEnd
-                , 5 :% TTupleEnd ]
-    :& TTablesEnd
-  where
-    fromList :: Ord a => [a] -> Map a TTupleEnd
-    fromList = Map.fromSet (const TTupleEnd) . Set.fromList
-
-type OrderedMapSchema k v =
-    Schema "ordered-map"
-    ( Table "ord" ( Ref (Prim k % Ø) ('There 'Here)
-                  % Ref (Prim k % Ø) ('There 'Here)
-                  % Ø
-                  ↦ Ø )
-    & Table "map" ( Ref (Prim k % Ø) 'Here
-                  % Ø
-                  ↦ Prim v
-                  % Ø)
-    & Table "keys" ( Prim k
-                   % Ø
-                   ↦ Ø)
-    & TablesEnd
-    )
-_testInst40 = Refl
-           :: Inst (OrderedMapSchema k v)
-          :~:    Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd)
-                     TTupleEnd
-              :& Map ((k :% TTupleEnd) :% TTupleEnd)
-                     (v :% TTupleEnd)
-              :& Map (k :% TTupleEnd)
-                     TTupleEnd
-              :& TTablesEnd
-
-orderedMapExample :: Inst (OrderedMapSchema Char Int)
-orderedMapExample =
-           fromList [ ('a' :% TTupleEnd) :% ('b' :% TTupleEnd) :% TTupleEnd
-                    , ('b' :% TTupleEnd) :% ('c' :% TTupleEnd) :% TTupleEnd
-                    ]
-    :& Map.fromList [ (('a' :% TTupleEnd) :% TTupleEnd, 123 :% TTupleEnd)
-                    , (('b' :% TTupleEnd) :% TTupleEnd, 456 :% TTupleEnd)
-                    , (('c' :% TTupleEnd) :% TTupleEnd, 789 :% TTupleEnd)
-                    ]
-    :&     fromList [ 'a' :% TTupleEnd, 'b' :% TTupleEnd, 'c' :% TTupleEnd ]
-    :& TTablesEnd
-  where
-    fromList :: Ord a => [a] -> Map a TTupleEnd
-    fromList = Map.fromSet (const TTupleEnd) . Set.fromList
 
 
-class ToSchema a where
-    toSchema :: Proxy a -> Inst a -> (String, Output.Schema)
-instance (ToTables ts, KnownSymbol name) => ToSchema (Schema name ts) where
-    toSchema Proxy x = (symbolVal @name Proxy, Map.fromList (toTables @ts Proxy x))
 
-class ToTables x where
-    toTables :: Proxy x -> Inst x -> [(String, Output.Table)]
-instance (ToTable t, ToTables ts) => ToTables (t & ts) where
-    toTables Proxy (x :& xs) = toTable @t Proxy x : toTables @ts Proxy xs
-instance ToTables TablesEnd where
-    toTables Proxy TTablesEnd = []
-
-class ToTable x where
-    toTable :: Proxy x -> Inst x -> (String, Output.Table)
-instance (ToColumns pk_v, KnownSymbol name) => ToTable (Table name pk_v) where
-    toTable Proxy x = (symbolVal @name Proxy, toColumns @pk_v Proxy x)
-
-class ToColumns x where
-    toColumns :: Proxy x -> Inst x -> Output.Table
-instance (ToFields pk, ToFields v) => ToColumns (pk ↦ v) where
-    toColumns Proxy = Map.mapWithKey (\k -> mappend k . toFields @v Proxy)
-                    . Map.mapKeys (toFields @pk Proxy)
-
-class ToFields a where
-    toFields :: Proxy a -> Inst a -> Output.Row
-instance (ToField c, ToFields cs) => ToFields (c % cs) where
-    toFields Proxy (c :% cs) = toField @c Proxy c : toFields @cs Proxy cs
-instance ToFields Ø where
-    toFields Proxy TTupleEnd = []
-
-class ToField a where
-    toField  :: Proxy a -> Inst a -> Output.Col
-instance (Serialise a) => ToField (Prim a) where
-    toField Proxy = Output.Prim . serialise
-instance (ToFields fk) => ToField (Ref fk index) where
-    toField Proxy = Output.Ref . toFields @fk Proxy
 
 
 
