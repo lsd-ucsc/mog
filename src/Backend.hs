@@ -9,29 +9,21 @@
 -- | Git backend for MOG
 module Backend where
 
--- import Control.Monad.IO.Class (MonadIO(..))
--- import Control.Applicative (liftA2)
--- import Data.ByteString.Char8 (pack)
-import Data.Proxy (Proxy(..))
 
-import GHC.TypeLits (KnownSymbol, symbolVal)
-
-import Data.Map (Map)
-import qualified Data.Map as Map
-
--- import Data.Set (Set)
-import qualified Data.Set as Set
-
--- import Crypto.Hash (hash, Digest, SHA1)
 import Codec.Serialise (Serialise, serialise)
--- import qualified Codec.Serialise as S
-
-import GHC.TypeLits (Symbol)
+-- import Crypto.Hash (hash, Digest, SHA1)
+import Data.Map (Map)
+import Data.Proxy (Proxy(..))
+-- import Data.Set (Set)
 import Data.Type.Equality ((:~:)(..))
-
--- import qualified Git as G
+import GHC.TypeLits (Symbol, KnownSymbol, symbolVal)
 import Terms
+
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Output
+-- import qualified Codec.Serialise as S
+-- import qualified Git as G
 
 --- -- Column
 --- --  Type
@@ -55,17 +47,18 @@ import qualified Output
 ---     () : Row
 --- -}
 
+infixr 5 &
+infix  6 ↦
+infixr 7 %
+
 data Schema (name :: Symbol) tables -- ^ Table-group wrapper
 data t & ts -- ^ Table-group cons
-infixr 5 &
 data TablesEnd -- ^ Table-group nil
 
 data Table (name :: Symbol) pk_v -- ^ Table (one) wrapper
 data pk ↦ v -- ^ Table (one) spec
-infix 6 ↦
 
 data c % cs -- ^ Tuple cons
-infixr 7 %
 data Ø -- ^ Tuple nil
 
 data Index = Here | There Index
@@ -73,8 +66,9 @@ data Ref fk (index :: Index)
 data Prim a
 
 -- This isn't a correct use of these symbols; this test only looks at precedence.
-_testPrec10 = Refl :: Int & Char % Word % () ↦ String % Float % () & Double
-            :~: Int & (((Char % (Word % ())) ↦ (String % (Float % ()))) & Double)
+_testPrec10 = Refl
+           :: Int & Char % Word % () ↦ String % Float % () & Double
+          :~: Int & (((Char % (Word % ())) ↦ (String % (Float % ()))) & Double)
 
 ---- TODO: instances to constrain to valid schemas
 ----
@@ -106,14 +100,18 @@ type family Cols c :: * where
     Cols Ø        = TTupleEnd
     Cols (c % cs) = Col c :% Cols cs
 
-_testCols10 = Refl :: Cols (Prim Char % Ø)
-            :~: (Char :% TTupleEnd)
-_testCols20 = Refl :: Cols (Ref (Prim Char % Ø) 'Here % Ø)
-            :~: ((Char :% TTupleEnd) :% TTupleEnd)
-_testCols30 = Refl :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-            :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
-_testCols31 = Refl :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-            :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
+_testCols10 = Refl
+           :: Cols (Prim Char % Ø)
+          :~: (Char :% TTupleEnd)
+_testCols20 = Refl
+           :: Cols (Ref (Prim Char % Ø) 'Here % Ø)
+          :~: ((Char :% TTupleEnd) :% TTupleEnd)
+_testCols30 = Refl
+           :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
+_testCols31 = Refl
+           :: Cols (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
 
 -- | Compute the type of an instance of a database schema.
 type family Inst a :: * where
@@ -123,26 +121,30 @@ type family Inst a :: * where
     Inst (Table name pk_v) = Inst pk_v
     Inst (pk ↦ v)          = Map (Cols pk) (Cols v)
 
-_testInst10 = Refl :: Inst (Prim Int % Ø ↦ Prim String % Ø)
-            :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
-_testInst20 = Refl :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
-            :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
+_testInst10 = Refl
+           :: Inst (Prim Int % Ø ↦ Prim String % Ø)
+          :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
+_testInst20 = Refl
+           :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
+          :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
 
 type PairSchema a =
     Schema "pair"
     ( Table "map" (Prim Bool % Ø ↦ Prim a % Ø)
     & TablesEnd
     )
-testInst25 = Refl :: Inst (PairSchema a)
-            :~: Map (Bool :% TTupleEnd) (a :% TTupleEnd) :& TTablesEnd
+_testInst25 = Refl
+           :: Inst (PairSchema a)
+          :~: Map (Bool :% TTupleEnd) (a :% TTupleEnd) :& TTablesEnd
 
 type TwopleSchema a b =
     Schema "twople"
     ( Table "singleton" (Ø ↦ Prim a % Prim b % Ø)
     & TablesEnd
     )
-testInst26 = Refl :: Inst (TwopleSchema a b)
-            :~: Map TTupleEnd (a :% b :% TTupleEnd) :& TTablesEnd
+_testInst26 = Refl
+           :: Inst (TwopleSchema a b)
+          :~: Map TTupleEnd (a :% b :% TTupleEnd) :& TTablesEnd
 
 type QueueSchema a =
     Schema "queue"
@@ -150,16 +152,17 @@ type QueueSchema a =
     & Table "mem" (Prim a % Ø ↦ Ø)
     & TablesEnd
     )
-_testInst30 = Refl :: Inst (QueueSchema a)
-            :~: Map ((a :% TTupleEnd) :% (a :% TTupleEnd) :% TTupleEnd) TTupleEnd
-            :& Map (a :% TTupleEnd) TTupleEnd
-            :& TTablesEnd
+_testInst30 = Refl
+           :: Inst (QueueSchema a)
+          :~:   Map ((a :% TTupleEnd) :% (a :% TTupleEnd) :% TTupleEnd) TTupleEnd
+             :& Map (a :% TTupleEnd) TTupleEnd
+             :& TTablesEnd
 
 queueExample :: Inst (QueueSchema Int)
 queueExample =
-        fromList [((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd), ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd)]
-    :&  fromList [2 :% TTupleEnd, 4 :% TTupleEnd, 5 :% TTupleEnd]
-    :&  TTablesEnd
+       fromList [((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd), ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd)]
+    :& fromList [2 :% TTupleEnd, 4 :% TTupleEnd, 5 :% TTupleEnd]
+    :& TTablesEnd
   where
     fromList :: Ord a => [a] -> Map a TTupleEnd
     fromList = Map.fromSet (const TTupleEnd) . Set.fromList
@@ -171,11 +174,12 @@ type OrderedMapSchema k v =
     & Table "keys" (Prim k % Ø ↦ Ø)
     & TablesEnd
     )
-_testInst40 = Refl :: Inst (OrderedMapSchema k v)
-            :~: Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd) TTupleEnd
-            :& Map ((k :% TTupleEnd) :% TTupleEnd) (v :% TTupleEnd)
-            :& Map (k :% TTupleEnd) TTupleEnd
-            :& TTablesEnd
+_testInst40 = Refl
+           :: Inst (OrderedMapSchema k v)
+          :~:    Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd) TTupleEnd
+              :& Map ((k :% TTupleEnd) :% TTupleEnd) (v :% TTupleEnd)
+              :& Map (k :% TTupleEnd) TTupleEnd
+              :& TTablesEnd
 
 class Out a where
     type Output a :: *
@@ -217,8 +221,11 @@ instance (OutCols pk, OutCols v) => Out (pk ↦ v) where
         = Map.mapWithKey (\k -> mappend k . outCols @v Proxy)
         . Map.mapKeys (outCols @pk Proxy)
 
+
 class OutCols a where
     outCols :: Proxy a -> Cols a -> Output.Row
+class OutCol a where
+    outCol  :: Proxy a -> Col  a -> Output.Col
 
 instance (OutCol c, OutCols cs) => OutCols (c % cs) where
     outCols Proxy (c :% cs) = outCol @c Proxy c : outCols @cs Proxy cs
@@ -226,16 +233,14 @@ instance (OutCol c, OutCols cs) => OutCols (c % cs) where
 instance OutCols Ø where
     outCols Proxy TTupleEnd = []
 
-class OutCol a where
-    outCol :: Proxy a -> Col a -> Output.Col
-
 instance Serialise a => OutCol (Prim a) where
     outCol Proxy = Output.Prim . serialise
 
 instance OutCols fk => OutCol (Ref fk index) where
     outCol Proxy = Output.Ref . outCols @fk Proxy
 
-_testOutput10 = Refl :: Output (QueueSchema a)
+_testOutput10 = Refl
+             :: Output (QueueSchema a)
             :~: ( String
                 ,    (String, Map Output.Row Output.Row)
                   :& (String, Map Output.Row Output.Row)
