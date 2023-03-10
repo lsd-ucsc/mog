@@ -2,29 +2,34 @@ name:                mog
 version:             0.1.0.0
 #synopsis:
 #description:
-homepage:            https://github.com/Twisol/mog#readme
+homepage:            https://github.com/lsd-ucsc/mog
 license:             BSD3
-author:              Jonathan Castello
-maintainer:          twisolar@gmail.com
-copyright:           Jonathan Castello
-category:            Web
+author:
+  - Jonathan Castello <jcaste14@ucsc.edu>
+  - Patrick Redmond   <plredmond@ucsc.edu>
 extra-source-files:
-- README.md
-- CHANGELOG.md
+  - README.md
+  - CHANGELOG.md
 
 dependencies:
   - base >= 4.7 && < 5
+  - bytestring
+  - containers
+  - cryptonite
+  - gitlib
+  - gitlib-libgit2
+  - serialise
 
 ghc-options:
-- -Wall
-- -Wcompat
-- -Widentities
-- -Wincomplete-record-updates
-- -Wincomplete-uni-patterns
-- -Wmissing-export-lists
-- -Wmissing-home-modules
-- -Wpartial-fields
-- -Wredundant-constraints
+  - -Wall
+  - -Wcompat
+  - -Widentities
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wmissing-export-lists
+  - -Wmissing-home-modules
+  - -Wpartial-fields
+  - -Wredundant-constraints
 
 executables:
   mog:
