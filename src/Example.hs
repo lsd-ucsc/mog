@@ -126,6 +126,11 @@ queueInstance =
     fromList :: Ord a => [a] -> Map a TTupleEnd
     fromList = Map.fromSet (const TTupleEnd) . Set.fromList
 
+-- TODO: doctest
+--    Just queueInstance
+-- == ( fromSchema @(QueueSchema Int) Proxy
+--    . toSchema @(QueueSchema Int) Proxy
+--    ) queueInstance
 
 
 
@@ -181,3 +186,9 @@ orderedMapExample =
   where
     fromList :: Ord a => [a] -> Map a TTupleEnd
     fromList = Map.fromSet (const TTupleEnd) . Set.fromList
+
+-- TODO: doctest
+--     Just orderedMapExample
+-- == ( fromSchema @(OrderedMapSchema Char Int) Proxy
+--    . toSchema @(OrderedMapSchema Char Int) Proxy
+--    ) orderedMapExample
