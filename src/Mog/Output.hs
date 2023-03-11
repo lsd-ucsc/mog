@@ -70,6 +70,12 @@ instance (KnownSymbol name) => Named (Table name pk_v) where
 
 -- * Output an instance
 
+toSchema :: (Convert a Datatype) => Proxy a -> Inst a -> Datatype
+toSchema = convertTo
+
+fromSchema :: (Convert a Datatype) => Proxy a -> Datatype -> Maybe (Inst a)
+fromSchema = convertFrom
+
 -- TODO: Replace Maybe with Either
 class Convert a b where
     convertTo   :: Proxy a -> Inst a -> b
@@ -109,17 +115,17 @@ instance (Convert pk Row, Convert v Row, Ord (Inst pk), RowWidth pk)
         = Map.mapWithKey (\k -> mappend k . convertTo @v Proxy)
         . Map.mapKeys (convertTo @pk Proxy)
     convertFrom _
+        -- Accumulate the pairs into a map
         = fmap Map.fromList
-        -- ^ Accumulate the pairs into a map
+        -- Move from [Maybe _] to Maybe [_]
         . sequenceA
-        -- ^ Move from [Maybe _] to Maybe [_]
+        -- Move from (Maybe _, Maybe _) to Maybe (_, _)
         . map (uncurry (liftA2 (,)))
-        -- ^ Move from (Maybe _, Maybe _) to Maybe (_, _)
+        -- Convert both elements of each pair
         . map (bimap (convertFrom @pk Proxy)
                      (convertFrom @v Proxy . drop (rowWidth @pk Proxy)))
-        -- ^ Convert both elements of each pair
+        -- Stream the key-value pairs
         . Map.toList
-        -- ^ Stream the key-value pairs
 
 instance (Convert c Col, Convert cs Row) => Convert (c % cs) Row where
     convertTo _ (c :% cs) = convertTo @c Proxy c : convertTo @cs Proxy cs
