@@ -128,10 +128,10 @@ class ToField a where
     toField   :: Proxy a -> Inst a -> Col
 instance (Serialise a) => ToField (Schema.Prim a) where
     fromField Proxy (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
-    fromField Proxy (Ref  x) = Nothing
+    fromField Proxy (Ref  _) = Nothing
     toField Proxy = Prim . serialise
 instance (ToFields fk) => ToField (Schema.Ref fk index) where
-    fromField Proxy (Prim x) = Nothing
+    fromField Proxy (Prim _) = Nothing
     fromField Proxy (Ref  x) = fromFields @fk Proxy x
     toField Proxy = Ref . toFields @fk Proxy
 

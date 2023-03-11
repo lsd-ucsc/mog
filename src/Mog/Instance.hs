@@ -60,18 +60,22 @@ type family Inst a :: Type where
     -- constituting the key for the referenced table.
     Inst (Ref fk _)        = Inst fk
 
+_testInst10 :: Inst (Prim Char % Ø)
+           :~: (Char :% Ø_)
 _testInst10 = Refl
-           :: Inst (Prim Char % Ø)
-          :~: (Char :% Ø_)
+
+_testInst11 :: Inst (Ref (Prim Char % Ø) 'Here % Ø)
+           :~: ((Char :% Ø_) :% Ø_)
 _testInst11 = Refl
-           :: Inst (Ref (Prim Char % Ø) 'Here % Ø)
-          :~: ((Char :% Ø_) :% Ø_)
+
+_testInst12 :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+           :~: Int :% (Char :% Word :% Ø_) :% Double :% Ø_
 _testInst12 = Refl
-           :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% Ø_) :% Double :% Ø_
+
+_testInst13 :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
+           :~: Int :% (Char :% Word :% Ø_) :% Double :% Ø_
 _testInst13 = Refl
-           :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% Ø_) :% Double :% Ø_
+
+_testInst20 :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
+           :~: Map (Int :% Ø_) (String :% Ø_)
 _testInst20 = Refl
-           :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
-          :~: Map (Int :% Ø_) (String :% Ø_)

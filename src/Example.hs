@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC "-Wno-missing-signatures" #-}
-
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -49,9 +47,9 @@ type PairSchema a =
 _testValid10 :: Proxy (PairSchema a)
 _testValid10 = _testValid Proxy
 
+_testInst25 :: Inst (PairSchema a)
+           :~: Map (Bool :% Ø_) (a :% Ø_) :& TTablesEnd
 _testInst25 = Refl
-           :: Inst (PairSchema a)
-          :~: Map (Bool :% Ø_) (a :% Ø_) :& TTablesEnd
 
 
 
@@ -77,9 +75,9 @@ type TwopleSchema a b =
 _testValid20 :: Proxy (TwopleSchema a b)
 _testValid20 = _testValid Proxy
 
+_testInst26 :: Inst (TwopleSchema a b)
+           :~: Map Ø_ (a :% b :% Ø_) :& TTablesEnd
 _testInst26 = Refl
-           :: Inst (TwopleSchema a b)
-          :~: Map Ø_ (a :% b :% Ø_) :& TTablesEnd
 
 
 
@@ -127,11 +125,11 @@ type QueueSchema a =
 _testValid30 :: Proxy (QueueSchema a)
 _testValid30 = _testValid Proxy
 
+_testInst30 :: Inst (QueueSchema a)
+           :~:   Map ((a :% Ø_) :% (a :% Ø_) :% Ø_) Ø_
+              :& Map (a :% Ø_) Ø_
+              :& TTablesEnd
 _testInst30 = Refl
-           :: Inst (QueueSchema a)
-          :~:   Map ((a :% Ø_) :% (a :% Ø_) :% Ø_) Ø_
-             :& Map (a :% Ø_) Ø_
-             :& TTablesEnd
 
 -- |
 --
@@ -186,15 +184,15 @@ type OrderedMapSchema k v =
 _testValid40 :: Proxy (OrderedMapSchema k v)
 _testValid40 = _testValid Proxy
 
+_testInst40 :: Inst (OrderedMapSchema k v)
+           :~:    Map ((k :% Ø_) :% (k :% Ø_) :% Ø_)
+                      Ø_
+               :& Map ((k :% Ø_) :% Ø_)
+                      (v :% Ø_)
+               :& Map (k :% Ø_)
+                      Ø_
+               :& TTablesEnd
 _testInst40 = Refl
-           :: Inst (OrderedMapSchema k v)
-          :~:    Map ((k :% Ø_) :% (k :% Ø_) :% Ø_)
-                     Ø_
-              :& Map ((k :% Ø_) :% Ø_)
-                     (v :% Ø_)
-              :& Map (k :% Ø_)
-                     Ø_
-              :& TTablesEnd
 
 -- |
 --
