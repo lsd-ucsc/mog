@@ -126,6 +126,7 @@ instance (Convert c Col, Convert cs Row) => Convert (c % cs) Row where
     convertFrom _ []     = Nothing
     convertFrom _ (x:xs) = liftA2 (:%) (convertFrom @c  Proxy x)
                                        (convertFrom @cs Proxy xs)
+
 instance Convert Ø Row where
     convertTo   _ Ø_    = []
     convertFrom _ []    = Just Ø_
