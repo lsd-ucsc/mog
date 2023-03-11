@@ -24,9 +24,9 @@ infixr 5 :&
 infixr 7 :%
 
 -- | Table-group cons
-data a :& b = a :& b deriving Show
+data a :& b = a :& b deriving (Show, Eq)
 -- | Table-group end
-data TTablesEnd = TTablesEnd deriving Show
+data TTablesEnd = TTablesEnd deriving (Show, Eq)
 
 -- | Tuple cons
 data a :% b = a :% b deriving (Show, Eq, Ord)

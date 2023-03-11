@@ -2,6 +2,7 @@
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-} -- TODO: !!!! Ord (Inst pk)
 
 -- | Module for the datatype to which a schema instance is encoded or decoded
 -- on the way to git
@@ -109,16 +110,22 @@ instance (FromTables ts, KnownSymbol name) => FromSchema (Schema name ts) where
 class FromTables a where
     fromTables :: Proxy a -> Datatype -> Maybe (Inst a)
 instance (FromTable t, FromTables ts) => FromTables (t & ts) where
-    fromTables Proxy tables = do
-        let name = tableName @t Proxy
-        head <- Map.lookup name tables >>= fromTable @t Proxy
-        tail <- fromTables @ts Proxy (Map.delete name tables)
-        Just (head :& tail)
+    fromTables Proxy tables =
+        let name = tableName @t Proxy in
+        liftA2 (:&) (Map.lookup name tables >>= fromTable @t Proxy)
+                    (fromTables @ts Proxy (Map.delete name tables))
 instance FromTables TablesEnd where
     fromTables Proxy tables =
         if Map.null tables
             then Just TTablesEnd
             else Nothing
+
+class RowWidth a where
+    rowWidth :: Proxy a -> Int
+instance RowWidth Ø where
+    rowWidth Proxy = 0
+instance (RowWidth cs) => RowWidth (c % cs) where
+    rowWidth Proxy = 1 + rowWidth @cs Proxy
 
 class FromTable a where
     tableName :: Proxy a -> String
@@ -129,15 +136,14 @@ instance (FromColumns pk_v, KnownSymbol name) => FromTable (Table name pk_v) whe
 
 class FromColumns a where
     fromColumns :: Proxy a -> Relation -> Maybe (Inst a)
-instance (FromFields pk, FromFields v) => FromColumns (pk ↦ v) where
-    fromColumns Proxy m = _fromColumns
-    {-
-    Goal: Maybe (Map (Inst pk) (Inst v))
-    -----
-    Have: m :: Map Row Row
-          pk :: ???
-          v :: ???
-    -}
+-- TODO: Ord (Inst pk) requires UndecidableInstances
+instance (Ord (Inst pk), RowWidth pk, FromFields pk, FromFields v) => FromColumns (pk ↦ v) where
+    fromColumns Proxy m
+        = fmap Map.fromList
+        . sequenceA
+        . map (\(x, y) -> liftA2 (,) (fromFields @pk Proxy x)
+                                     (fromFields @v Proxy $ drop (rowWidth @pk Proxy) y))
+        $ Map.toList m
 
 class FromFields a where
     fromFields :: Proxy a -> Row -> Maybe (Inst a)
