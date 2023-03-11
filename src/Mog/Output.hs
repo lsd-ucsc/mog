@@ -119,9 +119,9 @@ instance (ToField c, ToFields cs) => ToFields (c % cs) where
                                           (fromFields @cs Proxy xs)
     toFields Proxy (c :% cs) = toField @c Proxy c : toFields @cs Proxy cs
 instance ToFields Ø where
-    fromFields Proxy []     = Just TTupleEnd
+    fromFields Proxy []     = Just Ø_
     fromFields Proxy (_:_)  = Nothing
-    toFields Proxy TTupleEnd = []
+    toFields Proxy Ø_       = []
 
 class ToField a where
     fromField :: Proxy a -> Col    -> Maybe (Inst a)

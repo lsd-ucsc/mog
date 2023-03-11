@@ -5,7 +5,7 @@
 -- | Module for instances of a schema
 module Mog.Instance
     ( (:&)(..), TTablesEnd(..)
-    , (:%)(..), TTupleEnd(..)
+    , (:%)(..), Ø_(..)
     , Inst
     ) where
 
@@ -31,7 +31,7 @@ data TTablesEnd = TTablesEnd deriving (Show, Eq)
 -- | Tuple cons
 data a :% b = a :% b deriving (Show, Eq, Ord)
 -- | Tuple nil
-data TTupleEnd = TTupleEnd deriving (Show, Eq, Ord)
+data Ø_ = Ø_ deriving (Show, Eq, Ord)
 
 
 
@@ -52,7 +52,7 @@ type family Inst a :: Type where
 
     -- An instance of a list of columns is an instance for each column.
     Inst (c % cs)          = Inst c :% Inst cs
-    Inst Ø                 = TTupleEnd
+    Inst Ø                 = Ø_
 
     -- An instance of a primitive column is an instance of its type.
     Inst (Prim a)          = a
@@ -62,16 +62,16 @@ type family Inst a :: Type where
 
 _testInst10 = Refl
            :: Inst (Prim Char % Ø)
-          :~: (Char :% TTupleEnd)
+          :~: (Char :% Ø_)
 _testInst11 = Refl
            :: Inst (Ref (Prim Char % Ø) 'Here % Ø)
-          :~: ((Char :% TTupleEnd) :% TTupleEnd)
+          :~: ((Char :% Ø_) :% Ø_)
 _testInst12 = Refl
            :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
+          :~: Int :% (Char :% Word :% Ø_) :% Double :% Ø_
 _testInst13 = Refl
            :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Double % Ø)
-          :~: Int :% (Char :% Word :% TTupleEnd) :% Double :% TTupleEnd
+          :~: Int :% (Char :% Word :% Ø_) :% Double :% Ø_
 _testInst20 = Refl
            :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
-          :~: Map (Int :% TTupleEnd) (String :% TTupleEnd)
+          :~: Map (Int :% Ø_) (String :% Ø_)

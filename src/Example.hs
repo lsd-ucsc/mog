@@ -47,7 +47,7 @@ _testValid10 = _testValid Proxy
 
 _testInst25 = Refl
            :: Inst (PairSchema a)
-          :~: Map (Bool :% TTupleEnd) (a :% TTupleEnd) :& TTablesEnd
+          :~: Map (Bool :% Ø_) (a :% Ø_) :& TTablesEnd
 
 
 
@@ -75,7 +75,7 @@ _testValid20 = _testValid Proxy
 
 _testInst26 = Refl
            :: Inst (TwopleSchema a b)
-          :~: Map TTupleEnd (a :% b :% TTupleEnd) :& TTablesEnd
+          :~: Map Ø_ (a :% b :% Ø_) :& TTablesEnd
 
 
 
@@ -125,21 +125,21 @@ _testValid30 = _testValid Proxy
 
 _testInst30 = Refl
            :: Inst (QueueSchema a)
-          :~:   Map ((a :% TTupleEnd) :% (a :% TTupleEnd) :% TTupleEnd) TTupleEnd
-             :& Map (a :% TTupleEnd) TTupleEnd
+          :~:   Map ((a :% Ø_) :% (a :% Ø_) :% Ø_) Ø_
+             :& Map (a :% Ø_) Ø_
              :& TTablesEnd
 
 queueInstance :: Inst (QueueSchema Int)
 queueInstance =
-       fromList [ ((4 :% TTupleEnd) :% (2 :% TTupleEnd) :% TTupleEnd)
-                , ((5 :% TTupleEnd) :% (4 :% TTupleEnd) :% TTupleEnd) ]
-    :& fromList [ 2 :% TTupleEnd
-                , 4 :% TTupleEnd
-                , 5 :% TTupleEnd ]
+       fromList [ ((4 :% Ø_) :% (2 :% Ø_) :% Ø_)
+                , ((5 :% Ø_) :% (4 :% Ø_) :% Ø_) ]
+    :& fromList [ 2 :% Ø_
+                , 4 :% Ø_
+                , 5 :% Ø_ ]
     :& TTablesEnd
   where
-    fromList :: Ord a => [a] -> Map a TTupleEnd
-    fromList = Map.fromSet (const TTupleEnd) . Set.fromList
+    fromList :: Ord a => [a] -> Map a Ø_
+    fromList = Map.fromSet (const Ø_) . Set.fromList
 
 -- TODO: doctest
 --    Just queueInstance
@@ -182,28 +182,28 @@ _testValid40 = _testValid Proxy
 
 _testInst40 = Refl
            :: Inst (OrderedMapSchema k v)
-          :~:    Map ((k :% TTupleEnd) :% (k :% TTupleEnd) :% TTupleEnd)
-                     TTupleEnd
-              :& Map ((k :% TTupleEnd) :% TTupleEnd)
-                     (v :% TTupleEnd)
-              :& Map (k :% TTupleEnd)
-                     TTupleEnd
+          :~:    Map ((k :% Ø_) :% (k :% Ø_) :% Ø_)
+                     Ø_
+              :& Map ((k :% Ø_) :% Ø_)
+                     (v :% Ø_)
+              :& Map (k :% Ø_)
+                     Ø_
               :& TTablesEnd
 
 orderedMapExample :: Inst (OrderedMapSchema Char Int)
 orderedMapExample =
-           fromList [ ('a' :% TTupleEnd) :% ('b' :% TTupleEnd) :% TTupleEnd
-                    , ('b' :% TTupleEnd) :% ('c' :% TTupleEnd) :% TTupleEnd
+           fromList [ ('a' :% Ø_) :% ('b' :% Ø_) :% Ø_
+                    , ('b' :% Ø_) :% ('c' :% Ø_) :% Ø_
                     ]
-    :& Map.fromList [ (('a' :% TTupleEnd) :% TTupleEnd, 123 :% TTupleEnd)
-                    , (('b' :% TTupleEnd) :% TTupleEnd, 456 :% TTupleEnd)
-                    , (('c' :% TTupleEnd) :% TTupleEnd, 789 :% TTupleEnd)
+    :& Map.fromList [ (('a' :% Ø_) :% Ø_, 123 :% Ø_)
+                    , (('b' :% Ø_) :% Ø_, 456 :% Ø_)
+                    , (('c' :% Ø_) :% Ø_, 789 :% Ø_)
                     ]
-    :&     fromList [ 'a' :% TTupleEnd, 'b' :% TTupleEnd, 'c' :% TTupleEnd ]
+    :&     fromList [ 'a' :% Ø_, 'b' :% Ø_, 'c' :% Ø_ ]
     :& TTablesEnd
   where
-    fromList :: Ord a => [a] -> Map a TTupleEnd
-    fromList = Map.fromSet (const TTupleEnd) . Set.fromList
+    fromList :: Ord a => [a] -> Map a Ø_
+    fromList = Map.fromSet (const Ø_) . Set.fromList
 
 -- TODO: doctest
 --     Just orderedMapExample
