@@ -25,3 +25,12 @@ ghc-options:
 
 library:
   source-dirs: src
+
+tests:
+  doctest:
+    main: Doctests.hs
+    ghc-options: -threaded -rtsopts -with-rtsopts=-N
+    dependencies:
+      - mog
+      - doctest
+      - QuickCheck
