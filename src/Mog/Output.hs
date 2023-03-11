@@ -54,71 +54,87 @@ data Col
 
 -- * Output an instance
 
+-- TODO: Replace Maybe with Either
+
 -- TODO Rename ToSchema to ToDatatype
 class ToSchema a where
-    toSchema :: Proxy a -> Inst a -> (String, Datatype)
+    schemaName :: Proxy a -> String
+    fromSchema :: Proxy a -> Datatype -> Maybe (Inst a)
+    toSchema   :: Proxy a -> Inst a   -> Datatype
 instance (ToTables ts, KnownSymbol name) => ToSchema (Schema name ts) where
-    toSchema Proxy x = (symbolVal @name Proxy, Map.fromList (toTables @ts Proxy x))
+    schemaName Proxy    = symbolVal @name Proxy
+    fromSchema Proxy dt = fromTables @ts Proxy dt
+    toSchema   Proxy x  = Map.fromList (toTables @ts Proxy x)
 
 -- TODO Rename ToTables to ToRelations
-class ToTables x where
-    toTables :: Proxy x -> Inst x -> [(String, Relation)]
+class ToTables a where
+    fromTables :: Proxy a -> Datatype -> Maybe (Inst a)
+    toTables   :: Proxy a -> Inst a   -> [(String, Relation)]
 instance (ToTable t, ToTables ts) => ToTables (t & ts) where
-    toTables Proxy (x :& xs) = toTable @t Proxy x : toTables @ts Proxy xs
+    fromTables Proxy tables =
+        let name = tableName @t Proxy in
+        liftA2 (:&) (Map.lookup name tables >>= fromTable @t Proxy)
+                    (fromTables @ts Proxy (Map.delete name tables))
+    toTables Proxy (x :& xs) = (tableName @t Proxy , toTable @t Proxy x)
+                             : toTables @ts Proxy xs
 instance ToTables TablesEnd where
+    fromTables Proxy tables =
+        if Map.null tables
+            then Just TTablesEnd
+            else Nothing
     toTables Proxy TTablesEnd = []
 
 -- TODO Rename ToTable to ToRelation
-class ToTable x where
-    toTable :: Proxy x -> Inst x -> (String, Relation)
+class ToTable a where
+    tableName :: Proxy a -> String
+    fromTable :: Proxy a -> Relation -> Maybe (Inst a)
+    toTable   :: Proxy a -> Inst a   -> Relation
 instance (ToColumns pk_v, KnownSymbol name) => ToTable (Table name pk_v) where
-    toTable Proxy x = (symbolVal @name Proxy, toColumns @pk_v Proxy x)
+    tableName Proxy   = symbolVal @name Proxy
+    fromTable Proxy r = fromColumns @pk_v Proxy r
+    toTable   Proxy x = toColumns @pk_v Proxy x
 
 -- TODO Rename ToColumns to ToRows
-class ToColumns x where
-    toColumns :: Proxy x -> Inst x -> Relation
-instance (ToFields pk, ToFields v) => ToColumns (pk ↦ v) where
+-- TODO: Ord (Inst pk) requires UndecidableInstances
+class ToColumns a where
+    fromColumns :: Proxy a -> Relation -> Maybe (Inst a)
+    toColumns   :: Proxy a -> Inst a   -> Relation
+instance (ToFields pk, ToFields v, Ord (Inst pk), RowWidth pk) => ToColumns (pk ↦ v) where
+    fromColumns Proxy m
+        = fmap Map.fromList
+        . sequenceA
+        . map (\(x, y) -> liftA2 (,) (fromFields @pk Proxy x)
+                                     (fromFields @v Proxy $ drop (rowWidth @pk Proxy) y))
+        $ Map.toList m
     toColumns Proxy = Map.mapWithKey (\k -> mappend k . toFields @v Proxy)
                     . Map.mapKeys (toFields @pk Proxy)
 
 -- TODO Rename ToFields to ToRow
 class ToFields a where
-    toFields :: Proxy a -> Inst a -> Row
+    fromFields :: Proxy a -> Row    -> Maybe (Inst a)
+    toFields   :: Proxy a -> Inst a -> Row
 instance (ToField c, ToFields cs) => ToFields (c % cs) where
+    fromFields Proxy []     = Nothing
+    fromFields Proxy (x:xs) = liftA2 (:%) (fromField  @c  Proxy x)
+                                          (fromFields @cs Proxy xs)
     toFields Proxy (c :% cs) = toField @c Proxy c : toFields @cs Proxy cs
 instance ToFields Ø where
+    fromFields Proxy []     = Just TTupleEnd
+    fromFields Proxy (_:_)  = Nothing
     toFields Proxy TTupleEnd = []
 
 class ToField a where
-    toField  :: Proxy a -> Inst a -> Col
+    fromField :: Proxy a -> Col    -> Maybe (Inst a)
+    toField   :: Proxy a -> Inst a -> Col
 instance (Serialise a) => ToField (Schema.Prim a) where
+    fromField Proxy (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
+    fromField Proxy (Ref  x) = Nothing
     toField Proxy = Prim . serialise
 instance (ToFields fk) => ToField (Schema.Ref fk index) where
+    fromField Proxy (Prim x) = Nothing
+    fromField Proxy (Ref  x) = fromFields @fk Proxy x
     toField Proxy = Ref . toFields @fk Proxy
 
-
-
--- TODO: Replace Maybe with Either
-
-class FromSchema a where
-    schemaName :: Proxy a -> String
-    fromSchema :: Proxy a -> Datatype -> Maybe (Inst a)
-instance (FromTables ts, KnownSymbol name) => FromSchema (Schema name ts) where
-    schemaName Proxy    = symbolVal @name Proxy
-    fromSchema Proxy dt = fromTables @ts Proxy dt
-
-class FromTables a where
-    fromTables :: Proxy a -> Datatype -> Maybe (Inst a)
-instance (FromTable t, FromTables ts) => FromTables (t & ts) where
-    fromTables Proxy tables =
-        let name = tableName @t Proxy in
-        liftA2 (:&) (Map.lookup name tables >>= fromTable @t Proxy)
-                    (fromTables @ts Proxy (Map.delete name tables))
-instance FromTables TablesEnd where
-    fromTables Proxy tables =
-        if Map.null tables
-            then Just TTablesEnd
-            else Nothing
 
 class RowWidth a where
     rowWidth :: Proxy a -> Int
@@ -126,40 +142,3 @@ instance RowWidth Ø where
     rowWidth Proxy = 0
 instance (RowWidth cs) => RowWidth (c % cs) where
     rowWidth Proxy = 1 + rowWidth @cs Proxy
-
-class FromTable a where
-    tableName :: Proxy a -> String
-    fromTable :: Proxy a -> Relation -> Maybe (Inst a)
-instance (FromColumns pk_v, KnownSymbol name) => FromTable (Table name pk_v) where
-    tableName Proxy   = symbolVal @name Proxy
-    fromTable Proxy r = fromColumns @pk_v Proxy r
-
-class FromColumns a where
-    fromColumns :: Proxy a -> Relation -> Maybe (Inst a)
--- TODO: Ord (Inst pk) requires UndecidableInstances
-instance (Ord (Inst pk), RowWidth pk, FromFields pk, FromFields v) => FromColumns (pk ↦ v) where
-    fromColumns Proxy m
-        = fmap Map.fromList
-        . sequenceA
-        . map (\(x, y) -> liftA2 (,) (fromFields @pk Proxy x)
-                                     (fromFields @v Proxy $ drop (rowWidth @pk Proxy) y))
-        $ Map.toList m
-
-class FromFields a where
-    fromFields :: Proxy a -> Row -> Maybe (Inst a)
-instance FromFields Ø where
-    fromFields Proxy []     = Just TTupleEnd
-    fromFields Proxy (_:_)  = Nothing
-instance (FromField c, FromFields cs) => FromFields (c % cs) where
-    fromFields Proxy []     = Nothing
-    fromFields Proxy (x:xs) = liftA2 (:%) (fromField  @c  Proxy x)
-                                          (fromFields @cs Proxy xs)
-
-class FromField a where
-    fromField  :: Proxy a -> Col -> Maybe (Inst a)
-instance (Serialise a) => FromField (Schema.Prim a) where
-    fromField Proxy (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
-    fromField Proxy (Ref  x) = Nothing
-instance (FromFields fk) => FromField (Schema.Ref fk ix) where
-    fromField Proxy (Prim x) = Nothing
-    fromField Proxy (Ref  x) = fromFields @fk Proxy x
