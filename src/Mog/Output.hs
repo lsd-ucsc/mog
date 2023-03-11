@@ -75,7 +75,7 @@ class Convert a b where
     convertTo   :: Proxy a -> Inst a -> b
     convertFrom :: Proxy a -> b -> Maybe (Inst a)
 
-instance (Convert ts Datatype, KnownSymbol name)
+instance (Convert ts Datatype)
       => Convert (Schema name ts) Datatype where
     convertTo   _ = convertTo   @ts Proxy
     convertFrom _ = convertFrom @ts Proxy
