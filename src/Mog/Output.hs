@@ -20,8 +20,7 @@ import qualified Data.Map as Map
 
 import Codec.Serialise (Serialise, serialise, deserialiseOrFail)
 
-import Mog.Schema hiding (Prim, Ref) -- FIXME: these names collide
-import qualified Mog.Schema as Schema (Prim, Ref)
+import Mog.Schema
 import Mog.Instance
 
 
@@ -44,10 +43,10 @@ type Relation = Map Row Row
 -- | CBOR encoded columns representing a db-tuple.
 type Row = [Col]
 
--- | A column is either a primitive or a reference to columns of another table.
+-- | A column is either a single atom or group of columns.
 data Col
-    = Prim ByteString
-    | Ref Row
+    = Atom  ByteString
+    | Group Row
     deriving (Show, Eq, Ord)
 -- TODO Rename Col to Field
 
@@ -141,12 +140,12 @@ instance Convert Ø Ø_ Row where
     convertFrom _ []    = Just Ø_
     convertFrom _ (_:_) = Nothing
 
-instance (Serialise a) => Convert (Schema.Prim a) a Col where
-    convertFrom _ (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
-    convertFrom _ (Ref  _) = Nothing
-    convertTo   _          = Prim . serialise
+instance (Serialise a) => Convert (Prim a) a Col where
+    convertFrom _ (Atom  x) = either (const Nothing) Just (deserialiseOrFail x)
+    convertFrom _ (Group _) = Nothing
+    convertTo   _           = Atom . serialise
 
-instance (Convert fk fk' Row) => Convert (Schema.Ref fk index) fk' Col where
-    convertFrom _ (Prim _) = Nothing
-    convertFrom _ (Ref  x) = convertFrom @fk Proxy x
-    convertTo   _          = Ref . convertTo @fk Proxy
+instance (Convert fk fk' Row) => Convert (Ref fk index) fk' Col where
+    convertFrom _ (Atom  _) = Nothing
+    convertFrom _ (Group x) = convertFrom @fk Proxy x
+    convertTo   _           = Group . convertTo @fk Proxy
