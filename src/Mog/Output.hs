@@ -7,6 +7,7 @@
 -- on the way to git
 module Mog.Output where
 
+import Control.Applicative (liftA2)
 import Data.ByteString.Lazy (ByteString)
 import Data.Map (Map)
 import Data.Proxy (Proxy(..))
@@ -14,7 +15,7 @@ import GHC.TypeLits (KnownSymbol, symbolVal)
 
 import qualified Data.Map as Map
 
-import Codec.Serialise (Serialise, serialise)
+import Codec.Serialise (Serialise, serialise, deserialiseOrFail)
 
 import Mog.Schema hiding (Prim, Ref) -- FIXME: these names collide
 import qualified Mog.Schema as Schema (Prim, Ref)
@@ -93,3 +94,66 @@ instance (Serialise a) => ToField (Schema.Prim a) where
     toField Proxy = Prim . serialise
 instance (ToFields fk) => ToField (Schema.Ref fk index) where
     toField Proxy = Ref . toFields @fk Proxy
+
+
+
+-- TODO: Replace Maybe with Either
+
+class FromSchema a where
+    schemaName :: Proxy a -> String
+    fromSchema :: Proxy a -> Datatype -> Maybe (Inst a)
+instance (FromTables ts, KnownSymbol name) => FromSchema (Schema name ts) where
+    schemaName Proxy    = symbolVal @name Proxy
+    fromSchema Proxy dt = fromTables @ts Proxy dt
+
+class FromTables a where
+    fromTables :: Proxy a -> Datatype -> Maybe (Inst a)
+instance (FromTable t, FromTables ts) => FromTables (t & ts) where
+    fromTables Proxy tables = do
+        let name = tableName @t Proxy
+        head <- Map.lookup name tables >>= fromTable @t Proxy
+        tail <- fromTables @ts Proxy (Map.delete name tables)
+        Just (head :& tail)
+instance FromTables TablesEnd where
+    fromTables Proxy tables =
+        if Map.null tables
+            then Just TTablesEnd
+            else Nothing
+
+class FromTable a where
+    tableName :: Proxy a -> String
+    fromTable :: Proxy a -> Relation -> Maybe (Inst a)
+instance (FromColumns pk_v, KnownSymbol name) => FromTable (Table name pk_v) where
+    tableName Proxy   = symbolVal @name Proxy
+    fromTable Proxy r = fromColumns @pk_v Proxy r
+
+class FromColumns a where
+    fromColumns :: Proxy a -> Relation -> Maybe (Inst a)
+instance (FromFields pk, FromFields v) => FromColumns (pk ↦ v) where
+    fromColumns Proxy m = _fromColumns
+    {-
+    Goal: Maybe (Map (Inst pk) (Inst v))
+    -----
+    Have: m :: Map Row Row
+          pk :: ???
+          v :: ???
+    -}
+
+class FromFields a where
+    fromFields :: Proxy a -> Row -> Maybe (Inst a)
+instance FromFields Ø where
+    fromFields Proxy []     = Just TTupleEnd
+    fromFields Proxy (_:_)  = Nothing
+instance (FromField c, FromFields cs) => FromFields (c % cs) where
+    fromFields Proxy []     = Nothing
+    fromFields Proxy (x:xs) = liftA2 (:%) (fromField  @c  Proxy x)
+                                          (fromFields @cs Proxy xs)
+
+class FromField a where
+    fromField  :: Proxy a -> Col -> Maybe (Inst a)
+instance (Serialise a) => FromField (Schema.Prim a) where
+    fromField Proxy (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
+    fromField Proxy (Ref  x) = Nothing
+instance (FromFields fk) => FromField (Schema.Ref fk ix) where
+    fromField Proxy (Prim x) = Nothing
+    fromField Proxy (Ref  x) = fromFields @fk Proxy x
