@@ -11,6 +11,7 @@ module Mog.Output where
 
 import Control.Applicative (liftA2)
 import Data.ByteString.Lazy (ByteString)
+import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import Data.Proxy (Proxy(..))
 import GHC.TypeLits (KnownSymbol, symbolVal)
@@ -107,13 +108,18 @@ instance (Convert pk Row, Convert v Row, Ord (Inst pk), RowWidth pk)
     convertTo _
         = Map.mapWithKey (\k -> mappend k . convertTo @v Proxy)
         . Map.mapKeys (convertTo @pk Proxy)
-    convertFrom _ m
+    convertFrom _
         = fmap Map.fromList
+        -- ^ Accumulate the pairs into a map
         . sequenceA
-        . map (\(x, y) -> liftA2 (,) (convertFrom @pk Proxy x)
-                                     (convertFrom @v Proxy $ drop (rowWidth @pk Proxy) y))
+        -- ^ Move from [Maybe _] to Maybe [_]
+        . map (uncurry (liftA2 (,)))
+        -- ^ Move from (Maybe _, Maybe _) to Maybe (_, _)
+        . map (bimap (convertFrom @pk Proxy)
+                     (convertFrom @v Proxy . drop (rowWidth @pk Proxy)))
+        -- ^ Convert both elements of each pair
         . Map.toList
-        $ m
+        -- ^ Stream the key-value pairs
 
 instance (Convert c Col, Convert cs Row) => Convert (c % cs) Row where
     convertTo _ (c :% cs) = convertTo @c Proxy c : convertTo @cs Proxy cs
