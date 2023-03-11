@@ -8,7 +8,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 
 -- | Git backend for MOG
-module Backend where
+module Junk.Backend where
 
 
 import Codec.Serialise (Serialise, serialise)

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds, KindSignatures #-}
-module Frontend where
+module Junk.Frontend where
 
 import Data.Set (Set)
 import qualified Data.Set as Set
