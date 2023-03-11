@@ -36,15 +36,22 @@ infixr 5 &
 infix  6 ↦
 infixr 7 %
 
-data Schema (name :: Symbol) tables -- ^ Table-group wrapper
-data t & ts -- ^ Table-group cons
-data TablesEnd -- ^ Table-group nil
+-- | Table-group wrapper
+data Schema (name :: Symbol) tables
+-- | Table-group cons
+data t & ts
+-- | Table-group nil
+data TablesEnd
 
-data Table (name :: Symbol) pk_v -- ^ Table (one) wrapper
-data pk ↦ v -- ^ Table (one) spec
+-- | Table (one) wrapper
+data Table (name :: Symbol) pk_v
+-- | Table (one) spec
+data pk ↦ v
 
-data c % cs -- ^ Tuple cons
-data Ø -- ^ Tuple nil
+-- | Tuple cons
+data c % cs
+-- | Tuple nil
+data Ø
 
 data Index = Here | There Index
 data Ref fk (index :: Index)

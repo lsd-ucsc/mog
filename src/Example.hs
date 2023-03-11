@@ -18,6 +18,10 @@ import qualified Data.Map as Map
 import Mog.Schema
 import Mog.Instance
 
+-- $setup
+-- >>> :set -XTypeApplications
+-- >>> import Mog.Output
+
 _testValid :: ValidSchema a => Proxy a -> Proxy a
 _testValid Proxy = Proxy
 
@@ -129,6 +133,13 @@ _testInst30 = Refl
              :& Map (a :% Ø_) Ø_
              :& TTablesEnd
 
+-- |
+--
+-- >>> :{
+-- Just queueInstance == (fromSchema @(QueueSchema Int) Proxy
+--                        . toSchema @(QueueSchema Int) Proxy) queueInstance
+-- :}
+-- True
 queueInstance :: Inst (QueueSchema Int)
 queueInstance =
        fromList [ ((4 :% Ø_) :% (2 :% Ø_) :% Ø_)
@@ -141,11 +152,6 @@ queueInstance =
     fromList :: Ord a => [a] -> Map a Ø_
     fromList = Map.fromSet (const Ø_) . Set.fromList
 
--- TODO: doctest
---    Just queueInstance
--- == ( fromSchema @(QueueSchema Int) Proxy
---    . toSchema @(QueueSchema Int) Proxy
---    ) queueInstance
 
 
 
@@ -190,6 +196,13 @@ _testInst40 = Refl
                      Ø_
               :& TTablesEnd
 
+-- |
+--
+-- >>> :{
+-- Just orderedMapExample == (fromSchema @(OrderedMapSchema Char Int) Proxy
+--                            . toSchema @(OrderedMapSchema Char Int) Proxy) orderedMapExample
+-- :}
+-- True
 orderedMapExample :: Inst (OrderedMapSchema Char Int)
 orderedMapExample =
            fromList [ ('a' :% Ø_) :% ('b' :% Ø_) :% Ø_
@@ -204,9 +217,3 @@ orderedMapExample =
   where
     fromList :: Ord a => [a] -> Map a Ø_
     fromList = Map.fromSet (const Ø_) . Set.fromList
-
--- TODO: doctest
---     Just orderedMapExample
--- == ( fromSchema @(OrderedMapSchema Char Int) Proxy
---    . toSchema @(OrderedMapSchema Char Int) Proxy
---    ) orderedMapExample
