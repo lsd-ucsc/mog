@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-} -- TODO: !!!! Ord (Inst pk)
 
 -- | Module for the datatype to which a schema instance is encoded or decoded
@@ -50,95 +51,86 @@ data Col
 -- TODO Rename Col to Field
 
 
+class RowWidth a where
+    rowWidth :: Proxy a -> Int
+instance RowWidth Ø where
+    rowWidth _ = 0
+instance (RowWidth cs) => RowWidth (c % cs) where
+    rowWidth _ = 1 + rowWidth @cs Proxy
+
+
+class Named a where
+    named :: Proxy a -> String
+instance (KnownSymbol name) => Named (Schema name ts) where
+    named _ = symbolVal @name Proxy
+instance (KnownSymbol name) => Named (Table name pk_v) where
+    named _ = symbolVal @name Proxy
 
 
 -- * Output an instance
 
 -- TODO: Replace Maybe with Either
+class Convert a b where
+    convertTo   :: Proxy a -> Inst a -> b
+    convertFrom :: Proxy a -> b -> Maybe (Inst a)
 
--- TODO Rename ToSchema to ToDatatype
-class ToSchema a where
-    schemaName :: Proxy a -> String
-    fromSchema :: Proxy a -> Datatype -> Maybe (Inst a)
-    toSchema   :: Proxy a -> Inst a   -> Datatype
-instance (ToTables ts, KnownSymbol name) => ToSchema (Schema name ts) where
-    schemaName Proxy    = symbolVal @name Proxy
-    fromSchema Proxy dt = fromTables @ts Proxy dt
-    toSchema   Proxy x  = Map.fromList (toTables @ts Proxy x)
+instance (Convert ts Datatype, KnownSymbol name)
+      => Convert (Schema name ts) Datatype where
+    convertTo   _ = convertTo   @ts Proxy
+    convertFrom _ = convertFrom @ts Proxy
 
--- TODO Rename ToTables to ToRelations
-class ToTables a where
-    fromTables :: Proxy a -> Datatype -> Maybe (Inst a)
-    toTables   :: Proxy a -> Inst a   -> [(String, Relation)]
-instance (ToTable t, ToTables ts) => ToTables (t & ts) where
-    fromTables Proxy tables =
-        let name = tableName @t Proxy in
-        liftA2 (:&) (Map.lookup name tables >>= fromTable @t Proxy)
-                    (fromTables @ts Proxy (Map.delete name tables))
-    toTables Proxy (x :& xs) = (tableName @t Proxy , toTable @t Proxy x)
-                             : toTables @ts Proxy xs
-instance ToTables TablesEnd where
-    fromTables Proxy tables =
+instance (Convert t Relation, Convert ts Datatype, Named t)
+      => Convert (t & ts) Datatype where
+    convertTo _ (x :& xs) =
+        Map.insert (named @t Proxy)
+                   (convertTo @t  Proxy x)
+                   (convertTo @ts Proxy xs)
+    convertFrom _ tables =
+        let name = named @t Proxy in
+        liftA2 (:&) (Map.lookup name tables >>= convertFrom @t Proxy)
+                    (convertFrom @ts Proxy (Map.delete name tables))
+
+instance Convert TablesEnd Datatype where
+    convertTo   _ TTablesEnd = Map.empty
+    convertFrom _ tables =
         if Map.null tables
             then Just TTablesEnd
             else Nothing
-    toTables Proxy TTablesEnd = []
 
--- TODO Rename ToTable to ToRelation
-class ToTable a where
-    tableName :: Proxy a -> String
-    fromTable :: Proxy a -> Relation -> Maybe (Inst a)
-    toTable   :: Proxy a -> Inst a   -> Relation
-instance (ToColumns pk_v, KnownSymbol name) => ToTable (Table name pk_v) where
-    tableName Proxy   = symbolVal @name Proxy
-    fromTable Proxy r = fromColumns @pk_v Proxy r
-    toTable   Proxy x = toColumns @pk_v Proxy x
+instance (Convert pk_v Relation) => Convert (Table name pk_v) Relation where
+    convertTo   _ = convertTo   @pk_v Proxy
+    convertFrom _ = convertFrom @pk_v Proxy
 
--- TODO Rename ToColumns to ToRows
 -- TODO: Ord (Inst pk) requires UndecidableInstances
-class ToColumns a where
-    fromColumns :: Proxy a -> Relation -> Maybe (Inst a)
-    toColumns   :: Proxy a -> Inst a   -> Relation
-instance (ToFields pk, ToFields v, Ord (Inst pk), RowWidth pk) => ToColumns (pk ↦ v) where
-    fromColumns Proxy m
+instance (Convert pk Row, Convert v Row, Ord (Inst pk), RowWidth pk)
+      => Convert (pk ↦ v) Relation where
+    convertTo _
+        = Map.mapWithKey (\k -> mappend k . convertTo @v Proxy)
+        . Map.mapKeys (convertTo @pk Proxy)
+    convertFrom _ m
         = fmap Map.fromList
         . sequenceA
-        . map (\(x, y) -> liftA2 (,) (fromFields @pk Proxy x)
-                                     (fromFields @v Proxy $ drop (rowWidth @pk Proxy) y))
-        $ Map.toList m
-    toColumns Proxy = Map.mapWithKey (\k -> mappend k . toFields @v Proxy)
-                    . Map.mapKeys (toFields @pk Proxy)
+        . map (\(x, y) -> liftA2 (,) (convertFrom @pk Proxy x)
+                                     (convertFrom @v Proxy $ drop (rowWidth @pk Proxy) y))
+        . Map.toList
+        $ m
 
--- TODO Rename ToFields to ToRow
-class ToFields a where
-    fromFields :: Proxy a -> Row    -> Maybe (Inst a)
-    toFields   :: Proxy a -> Inst a -> Row
-instance (ToField c, ToFields cs) => ToFields (c % cs) where
-    fromFields Proxy []     = Nothing
-    fromFields Proxy (x:xs) = liftA2 (:%) (fromField  @c  Proxy x)
-                                          (fromFields @cs Proxy xs)
-    toFields Proxy (c :% cs) = toField @c Proxy c : toFields @cs Proxy cs
-instance ToFields Ø where
-    fromFields Proxy []     = Just Ø_
-    fromFields Proxy (_:_)  = Nothing
-    toFields Proxy Ø_       = []
+instance (Convert c Col, Convert cs Row) => Convert (c % cs) Row where
+    convertTo _ (c :% cs) = convertTo @c Proxy c : convertTo @cs Proxy cs
+    convertFrom _ []     = Nothing
+    convertFrom _ (x:xs) = liftA2 (:%) (convertFrom @c  Proxy x)
+                                       (convertFrom @cs Proxy xs)
+instance Convert Ø Row where
+    convertTo   _ Ø_    = []
+    convertFrom _ []    = Just Ø_
+    convertFrom _ (_:_) = Nothing
 
-class ToField a where
-    fromField :: Proxy a -> Col    -> Maybe (Inst a)
-    toField   :: Proxy a -> Inst a -> Col
-instance (Serialise a) => ToField (Schema.Prim a) where
-    fromField Proxy (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
-    fromField Proxy (Ref  _) = Nothing
-    toField Proxy = Prim . serialise
-instance (ToFields fk) => ToField (Schema.Ref fk index) where
-    fromField Proxy (Prim _) = Nothing
-    fromField Proxy (Ref  x) = fromFields @fk Proxy x
-    toField Proxy = Ref . toFields @fk Proxy
+instance (Serialise a) => Convert (Schema.Prim a) Col where
+    convertFrom _ (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
+    convertFrom _ (Ref  _) = Nothing
+    convertTo   _          = Prim . serialise
 
-
-class RowWidth a where
-    rowWidth :: Proxy a -> Int
-instance RowWidth Ø where
-    rowWidth Proxy = 0
-instance (RowWidth cs) => RowWidth (c % cs) where
-    rowWidth Proxy = 1 + rowWidth @cs Proxy
+instance (Convert fk Row) => Convert (Schema.Ref fk index) Col where
+    convertFrom _ (Prim _) = Nothing
+    convertFrom _ (Ref  x) = convertFrom @fk Proxy x
+    convertTo   _          = Ref . convertTo @fk Proxy
