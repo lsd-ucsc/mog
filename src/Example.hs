@@ -134,8 +134,8 @@ _testInst30 = Refl
 -- |
 --
 -- >>> :{
--- Just queueInstance == (fromSchema @(QueueSchema Int) Proxy
---                        . toSchema @(QueueSchema Int) Proxy) queueInstance
+-- Just queueInstance == (fromOutput @(QueueSchema Int) Proxy
+--                        . toOutput @(QueueSchema Int) Proxy) queueInstance
 -- :}
 -- True
 queueInstance :: Inst (QueueSchema Int)
@@ -197,8 +197,8 @@ _testInst40 = Refl
 -- |
 --
 -- >>> :{
--- Just orderedMapExample == (fromSchema @(OrderedMapSchema Char Int) Proxy
---                            . toSchema @(OrderedMapSchema Char Int) Proxy) orderedMapExample
+-- Just orderedMapExample == (fromOutput @(OrderedMapSchema Char Int) Proxy
+--                            . toOutput @(OrderedMapSchema Char Int) Proxy) orderedMapExample
 -- :}
 -- True
 orderedMapExample :: Inst (OrderedMapSchema Char Int)

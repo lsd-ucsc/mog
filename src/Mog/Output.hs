@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-} -- TODO: !!!! Ord (Inst pk)
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Module for the datatype to which a schema instance is encoded or decoded
 -- on the way to git
@@ -51,6 +51,15 @@ data Col
     deriving (Show, Eq, Ord)
 -- TODO Rename Col to Field
 
+-- * Output an instance
+
+toOutput :: (Convert a a' Datatype) => Proxy a -> a' -> Datatype
+toOutput = convertTo
+
+fromOutput :: (Convert a a' Datatype) => Proxy a -> Datatype -> Maybe a'
+fromOutput = convertFrom
+
+
 
 class RowWidth a where
     rowWidth :: Proxy a -> Int
@@ -68,26 +77,18 @@ instance (KnownSymbol name) => Named (Table name pk_v) where
     named _ = symbolVal @name Proxy
 
 
--- * Output an instance
-
-toSchema :: (Convert a Datatype) => Proxy a -> Inst a -> Datatype
-toSchema = convertTo
-
-fromSchema :: (Convert a Datatype) => Proxy a -> Datatype -> Maybe (Inst a)
-fromSchema = convertFrom
-
 -- TODO: Replace Maybe with Either
-class Convert a b where
-    convertTo   :: Proxy a -> Inst a -> b
-    convertFrom :: Proxy a -> b -> Maybe (Inst a)
+class (Inst i ~ a) => Convert i a b where
+    convertTo   :: Proxy i -> a -> b
+    convertFrom :: Proxy i -> b -> Maybe a
 
-instance (Convert ts Datatype)
-      => Convert (Schema name ts) Datatype where
+instance (Convert ts ts' Datatype)
+      => Convert (Schema name ts) ts' Datatype where
     convertTo   _ = convertTo   @ts Proxy
     convertFrom _ = convertFrom @ts Proxy
 
-instance (Convert t Relation, Convert ts Datatype, Named t)
-      => Convert (t & ts) Datatype where
+instance (Convert t t' Relation, Convert ts ts' Datatype, Named t)
+      => Convert (t & ts) (t' :& ts') Datatype where
     convertTo _ (x :& xs) =
         Map.insert (named @t Proxy)
                    (convertTo @t  Proxy x)
@@ -97,20 +98,20 @@ instance (Convert t Relation, Convert ts Datatype, Named t)
         liftA2 (:&) (Map.lookup name tables >>= convertFrom @t Proxy)
                     (convertFrom @ts Proxy (Map.delete name tables))
 
-instance Convert TablesEnd Datatype where
+instance Convert TablesEnd TTablesEnd Datatype where
     convertTo   _ TTablesEnd = Map.empty
     convertFrom _ tables =
         if Map.null tables
             then Just TTablesEnd
             else Nothing
 
-instance (Convert pk_v Relation) => Convert (Table name pk_v) Relation where
+instance (Convert pk_v pk_v' Relation)
+      => Convert (Table name pk_v) pk_v' Relation where
     convertTo   _ = convertTo   @pk_v Proxy
     convertFrom _ = convertFrom @pk_v Proxy
 
--- TODO: Ord (Inst pk) requires UndecidableInstances
-instance (Convert pk Row, Convert v Row, Ord (Inst pk), RowWidth pk)
-      => Convert (pk ↦ v) Relation where
+instance (Convert pk pk' Row, Convert v v' Row, RowWidth pk, Ord pk')
+      => Convert (pk ↦ v) (Map pk' v') Relation where
     convertTo _
         = Map.mapWithKey (\k -> mappend k . convertTo @v Proxy)
         . Map.mapKeys (convertTo @pk Proxy)
@@ -127,23 +128,25 @@ instance (Convert pk Row, Convert v Row, Ord (Inst pk), RowWidth pk)
         -- Stream the key-value pairs
         . Map.toList
 
-instance (Convert c Col, Convert cs Row) => Convert (c % cs) Row where
-    convertTo _ (c :% cs) = convertTo @c Proxy c : convertTo @cs Proxy cs
+instance (Convert c c' Col, Convert cs cs' Row)
+      => Convert (c % cs) (c' :% cs') Row where
+    convertTo _ (c :% cs) = convertTo @c  Proxy c
+                          : convertTo @cs Proxy cs
     convertFrom _ []     = Nothing
     convertFrom _ (x:xs) = liftA2 (:%) (convertFrom @c  Proxy x)
                                        (convertFrom @cs Proxy xs)
 
-instance Convert Ø Row where
+instance Convert Ø Ø_ Row where
     convertTo   _ Ø_    = []
     convertFrom _ []    = Just Ø_
     convertFrom _ (_:_) = Nothing
 
-instance (Serialise a) => Convert (Schema.Prim a) Col where
+instance (Serialise a) => Convert (Schema.Prim a) a Col where
     convertFrom _ (Prim x) = either (const Nothing) Just (deserialiseOrFail x)
     convertFrom _ (Ref  _) = Nothing
     convertTo   _          = Prim . serialise
 
-instance (Convert fk Row) => Convert (Schema.Ref fk index) Col where
+instance (Convert fk fk' Row) => Convert (Schema.Ref fk index) fk' Col where
     convertFrom _ (Prim _) = Nothing
     convertFrom _ (Ref  x) = convertFrom @fk Proxy x
     convertTo   _          = Ref . convertTo @fk Proxy
