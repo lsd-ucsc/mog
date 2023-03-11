@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC "-Wno-missing-signatures" #-}
 
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 
@@ -7,6 +9,7 @@ module Example where
 
 import Data.Set (Set)
 import Data.Map (Map)
+import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(..))
 
 import qualified Data.Set as Set
@@ -14,6 +17,9 @@ import qualified Data.Map as Map
 
 import Mog.Schema
 import Mog.Instance
+
+_testValid :: ValidSchema a => Proxy a -> Proxy a
+_testValid Proxy = Proxy
 
 
 
@@ -35,6 +41,9 @@ type PairSchema a =
     ( Table "map" (Prim Bool % Ø ↦ Prim a % Ø)
     & TablesEnd
     )
+
+_testValid10 :: Proxy (PairSchema a)
+_testValid10 = _testValid Proxy
 
 _testInst25 = Refl
            :: Inst (PairSchema a)
@@ -60,6 +69,9 @@ type TwopleSchema a b =
     ( Table "singleton" (Ø ↦ Prim a % Prim b % Ø)
     & TablesEnd
     )
+
+_testValid20 :: Proxy (TwopleSchema a b)
+_testValid20 = _testValid Proxy
 
 _testInst26 = Refl
            :: Inst (TwopleSchema a b)
@@ -107,6 +119,9 @@ type QueueSchema a =
     & Table "mem" (Prim a % Ø ↦ Ø)
     & TablesEnd
     )
+
+_testValid30 :: Proxy (QueueSchema a)
+_testValid30 = _testValid Proxy
 
 _testInst30 = Refl
            :: Inst (QueueSchema a)
@@ -161,6 +176,9 @@ type OrderedMapSchema k v =
                    ↦ Ø)
     & TablesEnd
     )
+
+_testValid40 :: Proxy (OrderedMapSchema k v)
+_testValid40 = _testValid Proxy
 
 _testInst40 = Refl
            :: Inst (OrderedMapSchema k v)

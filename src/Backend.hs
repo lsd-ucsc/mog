@@ -28,22 +28,6 @@ import qualified Data.Set as Set
 -- import qualified Git as G
 -- import qualified Output
 
----- TODO: instances to constrain to valid schemas
-----
----- -- A fk must match the pk of the table indicated by the index.
----- class                          Fk fk (index :: Index) tables                             where
----- instance Fk fk index tables => Fk fk (There index)    (t :#: tables)                     where -- inductive case
----- instance                       Fk pk  Here            (PkTable name pk tuple :#: tables) where -- base case
----- 
----- -- All fks must be valid. This is just (Map (\fk index -> ForeignKey fk index tables) tuple) that skips non-reference types.
----- class                                              Fks tuple                    tables where
----- instance (Fks tuple tables, Fk fk index tables) => Fks (Ref fk index :%: tuple) tables where -- overlapping inductive case
----- instance  Fks tuple tables                      => Fks (a            :%: tuple) tables where -- overlappable inductive case
----- instance                                           Fks ()                       tables where -- base case
----- 
----- -- A table has a valid pk and fks.
----- class                                       Tbl table                   tables where
----- instance (Pk pk tuple, Fks tuple tables) => Tbl (PkTable name pk tuple) tables where
 
 
 
