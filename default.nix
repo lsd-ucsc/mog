@@ -12,6 +12,7 @@ let
   src = pkgs.nix-gitignore.gitignoreSource [ "*.cabal" "dist/" "*.nix" "result" ] ./.;
   drv = haskellPackages.callCabal2nix "mog" src {
     gitlib-libgit2 = pkgs.haskell.lib.markUnbroken haskellPackages.gitlib-libgit2;
+    cryptonite = haskellPackages.callHackage "cryptonite" "0.30" { };
   };
   env = drv.envFunc { withHoogle = true; };
 in
