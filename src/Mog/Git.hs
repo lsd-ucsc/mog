@@ -78,8 +78,8 @@ hashChunksRow :: Output.Row -> [ByteString]
 hashChunksRow = concatMap hashChunksCol
 
 hashChunksCol :: Output.Col -> [ByteString]
-hashChunksCol (Output.Prim bs) = [bs]
-hashChunksCol (Output.Ref row) = hashChunksRow row
+hashChunksCol (Output.Atom bs) = [bs]
+hashChunksCol (Output.Group row) = hashChunksRow row
 
 -- | Create a tree OID containing, for each column, a tuple-index mapped to an OID.
 storeRow :: Git.MonadGit r m => Output.Row -> m (Git.TreeOid r)
@@ -97,5 +97,5 @@ storeRow
 
 -- | Create an OID for one column.
 storeCol :: Git.MonadGit r m => Output.Col -> m (Col r)
-storeCol (Output.Prim bs) = return . Prim =<< Git.createBlob (Git.BlobStringLazy bs)
-storeCol (Output.Ref row) = return . Ref =<< storeRow row
+storeCol (Output.Atom bs) = return . Prim =<< Git.createBlob (Git.BlobStringLazy bs)
+storeCol (Output.Group row) = return . Ref =<< storeRow row
