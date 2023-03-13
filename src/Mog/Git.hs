@@ -6,11 +6,12 @@
 -- | Module for interacting with a git backend to output/input a
 -- 'Output.Database' value to/from disk
 --
+-- The functions in this module are polymorphic over the "gitlib" backend.
+--
 -- The naming convention in here is currently following that of the Output module.
 module Mog.Git where
 
 -- import Control.Exception (bracket)
--- import Git.Libgit2 (LgRepo, lgFactory)
 import Control.Applicative (liftA2)
 import Control.Monad ((<=<))
 import Control.Arrow (first, second)
@@ -28,6 +29,8 @@ data Col r
     = Prim (Git.BlobOid r)
     | Ref (Git.TreeOid r)
 
+
+
 -- TODO: turn on the attribute
 --
 -- cat .git/info/attributes
@@ -35,18 +38,6 @@ data Col r
 
 -- XXX: This `withRepo` requires UnliftIO constraints on n and m and I don't
 -- want to depend on those packages
---
---withRepo :: ... => Git.RepositoryFactory n m r -> FilePath -> n a -> m a
---withRepo backend path action =
---    Git.withRepository'
---        backend
---        Git.RepositoryOptions
---            { Git.repoPath = path
---            , Git.repoIsBare = True
---            , Git.repoAutoCreate = True
---            , Git.repoWorkingDir = Nothing
---            }
---        action
 
 -- TODO: consider how to store an Output.Database w/o erasing the other trees
 -- (Output.Datatype) in the same database
