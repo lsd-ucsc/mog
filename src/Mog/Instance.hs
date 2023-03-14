@@ -3,6 +3,7 @@
 {-# LANGUAGE DataKinds #-}
 -- extensions for the validation classes
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeApplications, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 
 -- | Module for instances of a schema
@@ -90,16 +91,35 @@ _testInst20 = Refl
 
 -- * Schema validation
 
-class ValidSchema a where prune :: Proxy a -> Inst a -> Inst a
+class ValidSchema a where
+    pruneSchema :: Proxy a -> Inst a -> Inst a
 instance ValidTables tables => ValidSchema (Schema name tables) where
+    pruneSchema Proxy x = pruneTables @tables Proxy x
 
-class ValidTables ts
-instance (ValidTable t ts, ValidTables ts) => ValidTables (t & ts)
-instance ValidTables TablesEnd
+class ValidTables ts where
+    pruneTables :: Proxy ts -> Inst ts -> Inst ts
+instance (ValidTable t ts, ValidTables ts) => ValidTables (t & ts) where
+    -- | Prune referenced tables first. Consider this example:
+    --
+    --   "foo" {a@1@1, b@1@1, c@1@1}
+    -- & "bar" {a@1, b@1, c@1}
+    -- & "baz" {a, b}
+    -- & End
+    --
+    -- Here we should prune "bar" of c@1 first by observing "baz", so that
+    -- "foo" can learn that c@1@1 is absent.
+    pruneTables Proxy (x :& xs) =
+        let xs' = pruneTables @ts Proxy xs in
+        pruneTable @t @ts Proxy Proxy x xs' :& xs'
+instance ValidTables TablesEnd where
+    pruneTables Proxy TTablesEnd = TTablesEnd
 
-class ValidTable t ts
-instance ValidTable pk_v ts => ValidTable (Table name pk_v) ts
-instance (ValidCols pk ts, ValidCols v ts) => ValidTable (pk ↦ v) ts
+class ValidTable t ts where
+    pruneTable :: Proxy t -> Proxy ts -> Inst t -> Inst ts -> Inst t
+instance ValidTable pk_v ts => ValidTable (Table name pk_v) ts where
+    pruneTable Proxy Proxy x xs = pruneTable @pk_v @ts Proxy Proxy x xs
+instance (ValidCols pk ts, ValidCols v ts) => ValidTable (pk ↦ v) ts where
+    pruneTable Proxy Proxy x xs = error "not yet implemented"
 
 class ValidCols pk_v ts
 instance (ValidCol c ts, ValidCols cs ts) => ValidCols (c % cs) ts
