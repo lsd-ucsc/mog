@@ -90,23 +90,23 @@ _testInst20 = Refl
 
 -- * Schema validation
 
-class                          ValidSchema a                    where prune :: Proxy a -> Inst a -> Inst a
+class ValidSchema a where prune :: Proxy a -> Inst a -> Inst a
 instance ValidTables tables => ValidSchema (Schema name tables) where
 
-class                                         ValidTables ts
+class ValidTables ts
 instance (ValidTable t ts, ValidTables ts) => ValidTables (t & ts)
-instance                                      ValidTables TablesEnd
+instance ValidTables TablesEnd
 
-class                                           ValidTable t                 ts
-instance ValidTable pk_v ts                  => ValidTable (Table name pk_v) ts
-instance (ValidCols pk   ts, ValidCols v ts) => ValidTable (pk ↦ v)          ts
+class ValidTable t ts
+instance ValidTable pk_v ts => ValidTable (Table name pk_v) ts
+instance (ValidCols pk ts, ValidCols v ts) => ValidTable (pk ↦ v) ts
 
-class                                          ValidCols pk_v     ts
-instance (ValidCol   c ts, ValidCols cs ts) => ValidCols (c % cs) ts
-instance                                       ValidCols Ø        ts
+class ValidCols pk_v ts
+instance (ValidCol c ts, ValidCols cs ts) => ValidCols (c % cs) ts
+instance ValidCols Ø ts
 
-class                        ValidCol c              ts
-instance                     ValidCol (Prim a)       ts
+class ValidCol c ts
+instance ValidCol (Prim a) ts
 instance IsFk index fk ts => ValidCol (Ref fk index) ts
 
 -- ** Foreign keys
