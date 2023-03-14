@@ -12,6 +12,7 @@ let
   src = pkgs.nix-gitignore.gitignoreSource [ "*.cabal" "dist/" "*.nix" "result" ] ./.;
   drv = haskellPackages.callCabal2nix "mog" src {
     gitlib-libgit2 = pkgs.haskell.lib.markUnbroken haskellPackages.gitlib-libgit2;
+    git-config = with pkgs.haskell.lib; doJailbreak (dontCheck (markUnbroken haskellPackages.git-config));
   };
   env = drv.envFunc { withHoogle = true; };
 in
