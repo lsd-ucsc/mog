@@ -29,16 +29,6 @@ data Col r
     = Prim (Git.BlobOid r)
     | Ref (Git.TreeOid r)
 
-
-
--- TODO: turn on the attribute
---
--- cat .git/info/attributes
--- * merge=union
-
--- XXX: This `withRepo` requires UnliftIO constraints on n and m and I don't
--- want to depend on those packages
-
 -- TODO: consider how to store an Output.Database w/o erasing the other trees
 -- (Output.Datatype) in the same database
 --
