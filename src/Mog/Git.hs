@@ -37,11 +37,11 @@ data Col r
 storeDatatype :: Git.MonadGit r m => Output.Datatype -> m (Git.TreeOid r)
 storeDatatype
     -- TODO: We can control the merging of keys and values with suffixes:
-    -- .gitattributes := ```
-    -- *.pk merge=binary
-    -- *.val merge=custom-driver
-    -- *.blah merge=blah-driver # hypothetically we might want to give users the option to use existing merge drivers
-    -- ```
+    --   .gitattributes := ```
+    --   *.pk merge=binary
+    --   *.val merge=custom-driver
+    --   *.blah merge=blah-driver # hypothetically we might want to give users the option to use existing merge drivers
+    --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (sequence . second storeRelation)
@@ -54,10 +54,10 @@ storeRelation :: Git.MonadGit r m => Output.Relation -> m (Git.TreeOid r)
 storeRelation
     -- TODO: As an alternative to placing these configs at the datatype level,
     -- we can place them here by outputting the names of tuple columns:
-    -- .gitattributes := ```
-    -- */{pkfilecolumns} merge=binary
-    -- */{valuecolumns} merge=custom-driver
-    -- ```
+    --   .gitattributes := ```
+    --   */{pkfilecolumns} merge=binary
+    --   */{valuecolumns} merge=custom-driver
+    --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (sequence . second storeRow)

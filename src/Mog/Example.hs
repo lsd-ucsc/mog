@@ -3,9 +3,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 
-module Example where
+-- | Examples of the internal operations; also doubles as compile-time tests of
+-- the library
+module Mog.Example where
 
-import Data.Set (Set)
 import Data.Map (Map)
 import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(..))
@@ -28,16 +29,6 @@ _testValid Proxy = Proxy
 
 -- * Pair as map
 
--- ** Implementation
-
--- TODO
-
--- *** Characteristic relations
-
--- TODO
-
--- ** Schema
-
 type PairSchema a =
     Schema "pair"
     ( Table "map" (Prim Bool % Ø ↦ Prim a % Ø)
@@ -56,16 +47,6 @@ _testInst25 = Refl
 
 -- * Pair as singleton
 
--- ** Implementation
-
--- TODO
-
--- *** Characteristic relations
-
--- TODO
-
--- ** Schema
-
 type TwopleSchema a b =
     Schema "twople"
     ( Table "singleton" (Ø ↦ Prim a % Prim b % Ø)
@@ -83,37 +64,6 @@ _testInst26 = Refl
 
 
 -- * Queue
-
--- ** Implementation
-
-data Queue a = Queue [a]
-    deriving Show
-
-qEmpty :: Queue a
-qEmpty = Queue []
-
-qPush :: a -> Queue a -> Queue a
-qPush x (Queue xs) = Queue (x:xs)
-
-qPop :: Queue a -> Maybe (a, Queue a)
-qPop (Queue []) = Nothing
-qPop (Queue (x:xs)) = Just (x, Queue xs)
-
--- *** Characteristic relations
-
-qRmem :: Ord a => Queue a -> Set a
-qRmem (Queue xs) = Set.fromList xs
-
-qRob :: Ord a => Queue a -> Set (a, a)
-qRob (Queue []) = Set.empty
-qRob (Queue (x:xs)) = Set.fromList $ zip (x:xs) xs
-
-qAbstraction :: Ord a => Queue a -> (Set (a, a), Set a)
-qAbstraction q = (qRob q, qRmem q)
-
--- TODO: conversion to instance of schema
-
--- ** Schema
 
 type QueueSchema a =
     Schema "queue"
@@ -154,16 +104,6 @@ queueInstance =
 
 
 -- * Ordered map
-
--- ** Implementation
-
--- TODO
-
--- *** Characteristic relations
-
--- TODO
-
--- ** Schema
 
 type OrderedMapSchema k v =
     Schema "ordered-map"
