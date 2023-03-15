@@ -53,11 +53,10 @@ newtype GitConfig = GitConfig GCP.GitConfig deriving Eq
 instance Show GitConfig where
     show = Text.unpack . showGitConfig
 
-gitConfig :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m (Either String GitConfig)
-gitConfig = do
+readGitConfig :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m Text
+readGitConfig = do
     path <- gitConfigPath
-    content <- liftIO $ TIO.readFile path
-    return . bimap show GitConfig $ GCP.parseConfig content
+    liftIO $ TIO.readFile path
 
 showGitConfig :: GitConfig -> Text
 showGitConfig (GitConfig sections)
@@ -75,14 +74,16 @@ showGitConfig (GitConfig sections)
         . fmap (bimap fromStrict fromStrict)
         . HashMap.toList
 
--- | Assuming that we can correctly parse a gitconfig (because that's done by
--- an external library) this function ensures we can faithfully prettyprint
--- that content.
-gitConfigSafe :: Either String GitConfig -> Either String GitConfig
-gitConfigSafe original = do
-    parsed <- original
-    case bimap show GitConfig . GCP.parseConfig $ showGitConfig parsed of
-        Left err -> Left $ "internal error: Failed to parse git-config after pretty-printing: " ++ err
-        Right reparsed
-            | parsed == reparsed -> original
-            | otherwise -> Left "internal error: Pretty-printer failed to faithfully represent git-config"
+-- | Parse, pretty-print, parse again, and verify that both parsings returned
+-- the same result. This ensures that we can faithfully pretty-print by using
+-- the parser to detect bad pretty-printings.
+parseGitConfig :: Text -> Either String GitConfig
+parseGitConfig raw = do
+    let parseRaw = bimap show id . GCP.parseConfig
+        mapErr f = bimap f id
+    parsed <- parseRaw raw
+    reparsed <- mapErr ("bug: Failed to parse git-config after pretty-printing:\n" ++)
+        . parseRaw . showGitConfig $ GitConfig parsed
+    if parsed == reparsed
+    then return $ GitConfig parsed
+    else Left "bug: Pretty-printer does not faithfully represent git-config"
