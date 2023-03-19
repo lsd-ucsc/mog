@@ -31,10 +31,14 @@ import Mog.Output (Row, Col(..))
 import Mog.Tuple
 
 -- CONTINUE
--- 0) test each of the storage classes
 -- 1) validation instances
 -- 2) prune function
 -- 3) MRDTs class w/examples
+-- 4) MERGE-TYPES AND MERGE-FUNCTIONS
+
+-- $setup
+-- >>> :set -XTypeOperators
+-- >>> :set -XDataKinds
 
 
 
@@ -83,31 +87,27 @@ infixr 7 :@
 
 -- | A named datatype with a tuple of relations.
 newtype (name :: Symbol) ::: rel_tuple = Dt rel_tuple
+    deriving (Eq, Ord, Show)
 
 -- | A named relation with its tuple type
 newtype (name :: Symbol) ∷ pk_v = Rel pk_v
+    deriving (Eq, Ord, Show)
 
 -- | A primary key in a relation tuple.
 type pk ↦ v = Map pk v
 
 -- | A foreign key in a relation tuple.
 newtype a :@ (index :: Nat) = Ref a
+    deriving (Eq, Ord, Show)
 -- TODO: rename to @ on a newer GHC version
+--
+-- TODO: come up with a way of saying "Fk 1" instead of "a :@ 1" because it
+-- would be nice to not need to repeat the type.
 
 -- This isn't a correct use of these symbols; this test only looks at precedence.
 _testPrec10 ::  "mapping" ∷   k:@1  ↦ v
             :~: "mapping" ∷ ((k:@1) ↦ v)
 _testPrec10 = Refl
--- This isn't a correct use of these symbols; this test only looks at precedence.
-_testPrec20 ::
-        "ordered-map" :::   ( "order" ∷ Set (k:@2, k:@2)
-                            , "mapping" ∷ k:@1 ↦ v
-                            , "keys" ∷ Set k)
-    :~: "ordered-map" :::   ( "order" ∷ Set (k:@2, k:@2)
-                            , "mapping" ∷ ((k:@1) ↦ v)
-                            , "keys" ∷ Set k)
-_testPrec20 = Refl
--- TODO: can delete this test once we have more examples
 
 -- TODO: complete this, and probably define it elsewhere
 class {-Relations (Abstracted a) =>-} MRDT a where
@@ -160,6 +160,7 @@ data RestoreError
     | GotGroup'ExpectedAtom
     | GotAtom'ExpectedGroup
     | DeserialiseFailure DeserialiseFailure
+    deriving Eq
 
 type Option = Either RestoreError
 
@@ -195,6 +196,23 @@ class Elt a where
 -- ** Storage instances
 
 -- | A named datatype with a tuple of relations
+--
+-- >>> :{
+-- type OrderedMap k v
+--  = "ordered-map"
+--  ::: ( "order" ∷ Set (k:@2, k:@2)
+--      , "mapping" ∷ k:@1 ↦ v
+--      , "keys" ∷ Set k )
+-- omExample :: OrderedMap String Int
+-- omExample =
+--  Dt  ( Rel $ Set.fromList [(Ref "one", Ref "two"), (Ref "two", Ref "three")]
+--      , Rel $ Map.fromList [(Ref "one",1), (Ref "two",2), (Ref "three",3)]
+--      , Rel $ Set.fromList ["one", "two", "three"] )
+-- :}
+--
+-- >>> Right omExample == loadDt (storeDt omExample)
+-- True
+--
 instance
     -- XXX: might need this as a class/instance when used in the context of a DB
     -- with multiple datatypes
@@ -244,7 +262,32 @@ instance
         | n == symbolVal @name Proxy = Rel <$> loadTups x
         | otherwise = Left WrongRelationName{got=n, expected=symbolVal @name Proxy}
 
--- | A set of tuples that form a relation
+-- | A set of tuples that form a relation.
+--
+-- Set of singleton tuples.
+--
+-- >>> eg0 = Set.fromList ["hello", "world"]
+-- >>> storeTups eg0
+-- [(34...af,[Atom "ehello"]),(70...e2,[Atom "eworld"])]
+-- >>> Right eg0 == loadTups (storeTups eg0)
+-- True
+--
+-- Set of pairs.
+--
+-- >>> eg1 = Set.fromList [("a", "bc"), ("ab", "c")]
+-- >>> storeTups eg1
+-- [(fb...d0,[Atom "aa",Atom "bbc"]),(5c...db,[Atom "bab",Atom "ac"])]
+-- >>> Right eg1 == loadTups (storeTups eg1)
+-- True
+--
+-- Hyperedges in a hypergraph (the other two relations for edges and nodes
+-- aren't shown).
+--
+-- >>> eg2 = Set.fromList [(Ref (Ref 2, Ref 5), Ref (Ref 3, Ref 9))] :: Set ((Int:@2, Int:@2):@1, (Int:@2, Int:@2):@1)
+-- >>> storeTups eg2
+-- [(44...d6,[Group [Group [Atom "\STX"],Group [Atom "\ENQ"]],Group [Group [Atom "\ETX"],Group [Atom "\t"]]])]
+-- >>> Right eg2 == loadTups (storeTups eg2)
+-- True
 instance
         ( Ord pk
         , ToTupleList b pk                -- UndecidableInstances
@@ -264,7 +307,13 @@ instance
         .   mapM loadElts
         <=< mapM (\(hash,row) ->
                 if hash == hashRow row then pure row else Left WrongPkHash{gotHash=hash, expectedHash=hashRow row})
--- | A map (a set of tuples distinguished by a primary-key) that form a relation
+-- | A map (a set of tuples distinguished by a primary-key) that form a relation.
+--
+-- >>> eg0 = Map.fromList [(Ref "three",3), (Ref "two",2), (Ref "one",1)] :: String:@1 ↦ Int
+-- >>> storeTups eg0
+-- [(be...20,[Group [Atom "cone"],Atom "\SOH"]),(83...7c,[Group [Atom "ethree"],Atom "\ETX"]),(7f...ee,[Group [Atom "ctwo"],Atom "\STX"])]
+-- >>> Right eg0 == loadTups (storeTups eg0)
+-- True
 instance
         ( Ord pk
         , ToTupleList b₁ pk -- UndecidableInstances (variable not in head)
@@ -307,12 +356,14 @@ instance
     loadElts (x:xs) = liftA2 (,) (loadElt x) (loadElts xs)
 
 -- A primitive element
-instance Serialise a => Elt a where
+instance -- {-# OVERLAPPABLE #-}
+        Serialise a =>
+    Elt a where
     storeElt = Atom . serialise
     loadElt (Atom bs )   = bimap DeserialiseFailure id $ deserialiseOrFail bs
     loadElt (Group _row) = Left GotGroup'ExpectedAtom
 -- A foreign-key reference element
-instance
+instance {-# OVERLAPS #-}
         ( ToTupleList b a                -- UndecidableInstances
         , Elts (TupleList (TupleOf b a)) -- UndecidableInstances
         ) =>
