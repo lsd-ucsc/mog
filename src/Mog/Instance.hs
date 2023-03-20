@@ -10,6 +10,7 @@
 module Mog.Instance
     ( (:&)(..), TTablesEnd(..)
     , (:%)(..), Ø_(..)
+    , Assoc
     , Inst
     , ValidSchema(..)
     ) where
@@ -39,6 +40,9 @@ data a :% b = a :% b deriving (Show, Eq, Ord)
 -- | Tuple nil
 data Ø_ = Ø_ deriving (Show, Eq, Ord)
 
+-- | Tuples are an easily mappable association of keys to values.
+type Assoc k v = [(k, v)]
+
 
 
 
@@ -51,10 +55,10 @@ type family Inst a :: Type where
     Inst (t & ts)          = Inst t :& Inst ts
     Inst TablesEnd         = TTablesEnd
 
-    -- An instance of a table consists of a map from instances of its key columns
-    -- to instances of its value columns.
+    -- An instance of a table consists of an assoc from instances of its key
+    -- columns to instances of its value columns.
     Inst (Table name pk_v) = Inst pk_v
-    Inst (pk ↦ v)          = Map (Inst pk) (Inst v)
+    Inst (pk ↦ v)          = Assoc (Inst pk) (Inst v)
 
     -- An instance of a list of columns is an instance for each column.
     Inst (c % cs)          = Inst c :% Inst cs
@@ -83,7 +87,7 @@ _testInst13 :: Inst (Prim Int % Ref (Prim Char % Prim Word % Ø) 'Here % Prim Do
 _testInst13 = Refl
 
 _testInst20 :: Inst (Table "teble" (Prim Int % Ø ↦ Prim String % Ø))
-           :~: Map (Int :% Ø_) (String :% Ø_)
+           :~: Assoc (Int :% Ø_) (String :% Ø_)
 _testInst20 = Refl
 
 

@@ -39,7 +39,7 @@ _testValid10 :: Proxy (PairSchema a)
 _testValid10 = _testValid Proxy
 
 _testInst25 :: Inst (PairSchema a)
-           :~: Map (Bool :% Ø_) (a :% Ø_) :& TTablesEnd
+           :~: Assoc (Bool :% Ø_) (a :% Ø_) :& TTablesEnd
 _testInst25 = Refl
 
 
@@ -57,7 +57,7 @@ _testValid20 :: Proxy (TwopleSchema a b)
 _testValid20 = _testValid Proxy
 
 _testInst26 :: Inst (TwopleSchema a b)
-           :~: Map Ø_ (a :% b :% Ø_) :& TTablesEnd
+           :~: Assoc Ø_ (a :% b :% Ø_) :& TTablesEnd
 _testInst26 = Refl
 
 
@@ -76,8 +76,8 @@ _testValid30 :: Proxy (QueueSchema a)
 _testValid30 = _testValid Proxy
 
 _testInst30 :: Inst (QueueSchema a)
-           :~:   Map ((a :% Ø_) :% (a :% Ø_) :% Ø_) Ø_
-              :& Map (a :% Ø_) Ø_
+           :~:   Assoc ((a :% Ø_) :% (a :% Ø_) :% Ø_) Ø_
+              :& Assoc (a :% Ø_) Ø_
               :& TTablesEnd
 _testInst30 = Refl
 
@@ -90,15 +90,15 @@ _testInst30 = Refl
 -- True
 queueInstance :: Inst (QueueSchema Int)
 queueInstance =
-       fromList [ ((4 :% Ø_) :% (2 :% Ø_) :% Ø_)
-                , ((5 :% Ø_) :% (4 :% Ø_) :% Ø_) ]
+       fromList [ (4 :% Ø_) :% (2 :% Ø_) :% Ø_
+                , (5 :% Ø_) :% (4 :% Ø_) :% Ø_ ]
     :& fromList [ 2 :% Ø_
                 , 4 :% Ø_
                 , 5 :% Ø_ ]
     :& TTablesEnd
   where
-    fromList :: Ord a => [a] -> Map a Ø_
-    fromList = Map.fromSet (const Ø_) . Set.fromList
+    fromList :: [a] -> Assoc a Ø_
+    fromList = map $ \x -> (x, Ø_)
 
 
 
@@ -125,11 +125,11 @@ _testValid40 :: Proxy (OrderedMapSchema k v)
 _testValid40 = _testValid Proxy
 
 _testInst40 :: Inst (OrderedMapSchema k v)
-           :~:    Map ((k :% Ø_) :% (k :% Ø_) :% Ø_)
+           :~:    Assoc ((k :% Ø_) :% (k :% Ø_) :% Ø_)
                       Ø_
-               :& Map ((k :% Ø_) :% Ø_)
+               :& Assoc ((k :% Ø_) :% Ø_)
                       (v :% Ø_)
-               :& Map (k :% Ø_)
+               :& Assoc (k :% Ø_)
                       Ø_
                :& TTablesEnd
 _testInst40 = Refl
@@ -143,15 +143,15 @@ _testInst40 = Refl
 -- True
 orderedMapExample :: Inst (OrderedMapSchema Char Int)
 orderedMapExample =
-           fromList [ ('a' :% Ø_) :% ('b' :% Ø_) :% Ø_
-                    , ('b' :% Ø_) :% ('c' :% Ø_) :% Ø_
-                    ]
-    :& Map.fromList [ (('a' :% Ø_) :% Ø_, 123 :% Ø_)
-                    , (('b' :% Ø_) :% Ø_, 456 :% Ø_)
-                    , (('c' :% Ø_) :% Ø_, 789 :% Ø_)
-                    ]
-    :&     fromList [ 'a' :% Ø_, 'b' :% Ø_, 'c' :% Ø_ ]
+       fromList [ ('a' :% Ø_) :% ('b' :% Ø_) :% Ø_
+                , ('b' :% Ø_) :% ('c' :% Ø_) :% Ø_
+                ]
+    :& [ (('a' :% Ø_) :% Ø_, 123 :% Ø_)
+       , (('b' :% Ø_) :% Ø_, 456 :% Ø_)
+       , (('c' :% Ø_) :% Ø_, 789 :% Ø_)
+       ]
+    :& fromList [ 'a' :% Ø_, 'b' :% Ø_, 'c' :% Ø_ ]
     :& TTablesEnd
   where
-    fromList :: Ord a => [a] -> Map a Ø_
-    fromList = Map.fromSet (const Ø_) . Set.fromList
+    fromList :: [a] -> Assoc a Ø_
+    fromList = map $ \x -> (x, Ø_)

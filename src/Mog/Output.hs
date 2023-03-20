@@ -110,22 +110,22 @@ instance (Convert pk_v pk_v' Relation)
     convertFrom _ = convertFrom @pk_v Proxy
 
 instance (Convert pk pk' Row, Convert v v' Row, RowWidth pk, Ord pk')
-      => Convert (pk ↦ v) (Map pk' v') Relation where
-    convertTo _
-        = Map.mapWithKey (\k -> mappend k . convertTo @v Proxy)
-        . Map.mapKeys (convertTo @pk Proxy)
-    convertFrom _
-        -- Accumulate the pairs into a map
-        = fmap Map.fromList
-        -- Move from [Maybe _] to Maybe [_]
-        . sequenceA
-        -- Move from (Maybe _, Maybe _) to Maybe (_, _)
-        . map (uncurry (liftA2 (,)))
-        -- Convert both elements of each pair
-        . map (bimap (convertFrom @pk Proxy)
-                     (convertFrom @v Proxy . drop (rowWidth @pk Proxy)))
-        -- Stream the key-value pairs
-        . Map.toList
+      => Convert (pk ↦ v) (Assoc pk' v') Relation where
+--  convertTo _
+--      = Map.mapWithKey (\k -> mappend k . convertTo @v Proxy)
+--      . Map.mapKeys (convertTo @pk Proxy)
+--  convertFrom _
+--      -- Accumulate the pairs into a map
+--      = fmap Map.fromList
+--      -- Move from [Maybe _] to Maybe [_]
+--      . sequenceA
+--      -- Move from (Maybe _, Maybe _) to Maybe (_, _)
+--      . map (uncurry (liftA2 (,)))
+--      -- Convert both elements of each pair
+--      . map (bimap (convertFrom @pk Proxy)
+--                   (convertFrom @v Proxy . drop (rowWidth @pk Proxy)))
+--      -- Stream the key-value pairs
+--      . Map.toList
 
 instance (Convert c c' Col, Convert cs cs' Row)
       => Convert (c % cs) (c' :% cs') Row where
