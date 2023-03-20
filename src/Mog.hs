@@ -1,12 +1,4 @@
 -- | Module for UI/UX reexports.
-module Mog where
+module Mog (module X) where
 
--- TODO: ui/ux
-
--- -- import Data.Kind
--- 
--- class Relations a where
--- 
--- class Relations b => Galois a b where
---     α :: a -> b
---     γ :: b -> a
+import Mog.UI as X

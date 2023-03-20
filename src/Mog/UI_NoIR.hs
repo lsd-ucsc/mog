@@ -10,7 +10,7 @@
 -- of relations and how they handle the "singleton list" case by duplicating
 -- the instance which processes a single element of the "list."
 {-# LANGUAGE UndecidableInstances #-}
-module Mog.UI where
+module Mog.UI_NoIR where
 
 import Codec.Serialise (Serialise, serialise, deserialiseOrFail, DeserialiseFailure)
 import Control.Applicative (liftA2)
@@ -120,29 +120,88 @@ class {-Relations (Abstracted a) =>-} MRDT a where
 
 -- * Validation
 
---VALIDATION--class Pks a where
---VALIDATION--    type PksFor a :: Type
---VALIDATION--    getPks :: a -> PksFor a
---VALIDATION--
---VALIDATION--instance Pks () where
---VALIDATION--    type PksFor () = ()
---VALIDATION--    getPks () = ()
---VALIDATION--instance (Pks x, Pks xs) => Pks (x, xs) where
---VALIDATION--    type PksFor (x, xs) = (PksFor x, PksFor xs)
---VALIDATION--    getPks (x, xs) = (getPks x, getPks xs)
---VALIDATION--
---VALIDATION--instance Pks pk_v => Pks (name ∷ pk_v) where
---VALIDATION--    type PksFor (name ∷ pk_v) = PksFor pk_v
---VALIDATION--    getPks (Rel x) = getPks x
---VALIDATION--instance Pks (pk ↦ v) where
---VALIDATION--    type PksFor (pk ↦ v) = Set pk
---VALIDATION--    getPks = Map.keysSet
---VALIDATION--instance Pks (Set pk) where
---VALIDATION--    type PksFor (Set pk) = Set pk
---VALIDATION--    getPks = id
---VALIDATION--
---VALIDATION---- class Fk (ix :: Index) k rs where
---VALIDATION----     aa :: PksFor 
+-- (1) traverse to validate FK types
+-- (2) traverse to obtain PK sets
+-- (3) traverse to prune
+class ValidDt a where
+    pruneDt :: a -> a
+instance
+        ( ToTupleList b rels -- UndecidableInstances (variable not in head)
+        , ValidRels (TupleList (TupleOf b rels)) -- UndecidableInstances (nesting)
+        ) =>
+    ValidDt (name ::: rels) where
+    pruneDt (Dt x) = Dt . fromTL . pruneRels . toTL $ x
+
+class ValidRels a where
+    type RelsPks a :: Type
+    relsPks :: a -> RelsPks a
+    pruneRels :: a -> a
+instance
+    ValidRels () where
+    type RelsPks () = ()
+    relsPks () = ()
+    pruneRels () = ()
+instance
+    ValidRels (x, xs) where
+    -- | Prune referenced tables first. Consider this
+    -- example:
+    --
+    -- ( "foo" has {a:@1:@1, b:@1:@1, c:@1:@1}
+    -- , "bar" has {a:@1,    b:@1,    c:@1   }
+    -- , "baz" has {a,       b               }
+    -- )
+    --
+    -- Here we should prune "bar" of c@1 first by observing
+    -- "baz", so that "foo" can learn that c@1@1 is absent.
+--  type RelsPks (x, xs) = (RelPks x, PksFor xs)
+--  pruneRels (x, xs) =
+--      let (xs', pks) = pruneRels xs in
+--      undefined --- (
+
+class ValidRel a as where
+    type RelPks a as :: Type
+    relPks :: Proxy as -> a -> RelPks a as
+    pruneRel :: Proxy as -> RelPks a as -> a -> a
+--instance ValidRel (name ∷ a) as where
+--    type RelPks (name ∷ a) as = TupsPks a as
+--    relPks _ (Rel x) = tupsPks @as Proxy x
+
+class ValidTups a as where
+    type TupsPks a as :: Type
+    tupsPks :: Proxy as -> a -> TupsPks a as
+    pruneTups :: Proxy as -> TupsPks a as -> a -> a
+--instance ValidTups (Set a) as 
+
+-- class Pks a where
+--     type PksFor a :: Type
+--     getPks :: a -> PksFor a
+-- instance
+--         ( ToTupleList b rels -- UndecidableInstances (variable not in head)
+--         , ValidRels (TupleList (TupleOf b rels)) -- UndecidableInstances (nesting)
+--         ) =>
+--     ValidDt (name ::: rels) where
+--     pruneDt (Dt x) = Dt . fromTL . fst . pruneRels . toTL $ x
+-- 
+-- --instance Pks () where
+-- --    type PksFor () = ()
+-- --    getPks () = ()
+-- --instance (Pks x, Pks xs) => Pks (x, xs) where
+-- --    type PksFor (x, xs) = (PksFor x, PksFor xs)
+-- --    getPks (x, xs) = (getPks x, getPks xs)
+-- --
+-- --instance Pks pk_v => Pks (name ∷ pk_v) where
+-- --    type PksFor (name ∷ pk_v) = PksFor pk_v
+-- --    getPks (Rel x) = getPks x
+-- --instance Pks (pk ↦ v) where
+-- --    type PksFor (pk ↦ v) = Set pk
+-- --    getPks = Map.keysSet
+-- --instance Pks (Set pk) where
+-- --    type PksFor (Set pk) = Set pk
+-- --    getPks = id
+-- 
+-- -- class Fk (ix :: Index) k rs where
+-- --     aa :: PksFor 
+
 
 
 
@@ -303,6 +362,7 @@ instance
     loadTups
         -- XXX: opportunity to apply Fk-tuple-filter here using Set.intersection if the approach described in storeDt doesn't work
         =   fmap Set.fromList
+        -- FIXME: merge duplicate tuples here with: M.keysSet . uncurry M.fromListWith
         .   fmap (map fromTL)
         .   mapM loadElts
         <=< mapM (\(hash,row) ->
@@ -334,6 +394,7 @@ instance
     loadTups
         -- XXX: opportunity to apply Fk-tuple-filter here using Map.restrictKeys if the approach described in storeDt doesn't work
         =   fmap Map.fromList
+        -- FIXME: merge duplicate tuples here with: M.fromListWith
         .   fmap (map $ bimap fromTL fromTL)
         .   mapM (\(pk,v) -> liftA2 (,) (loadElts pk) (loadElts v))
         <=< mapM (\(hash,row) ->
