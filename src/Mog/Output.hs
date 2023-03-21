@@ -116,9 +116,8 @@ type Option = Either RestoreError
 -- | A named datatype with a tuple of relations
 --
 -- >>> :{
--- Right orderedMapExample ==
---          convertFrom @(OrderedMapSchema Char Int) @_ @Datatype Proxy
---           (convertTo @(OrderedMapSchema Char Int) @_ @Datatype Proxy orderedMapExample)
+-- pure orderedMapExample == convertFrom @(OrderedMapSchema Char Int) @_ @Datatype Proxy
+--                            (convertTo @(OrderedMapSchema Char Int) @_ @Datatype Proxy orderedMapExample)
 -- :}
 -- True
 --

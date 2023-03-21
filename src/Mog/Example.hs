@@ -7,12 +7,8 @@
 -- the library
 module Mog.Example where
 
-import Data.Map (Map)
 import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(..))
-
-import qualified Data.Set as Set
-import qualified Data.Map as Map
 
 import Mog.Schema
 import Mog.Instance
@@ -84,7 +80,7 @@ _testInst30 = Refl
 -- |
 --
 -- >>> :{
--- Just queueInstance == (fromOutput @(QueueSchema Int) Proxy
+-- pure queueInstance == (fromOutput @(QueueSchema Int) Proxy
 --                        . toOutput @(QueueSchema Int) Proxy) queueInstance
 -- :}
 -- True
@@ -137,7 +133,7 @@ _testInst40 = Refl
 -- |
 --
 -- >>> :{
--- Just orderedMapExample == (fromOutput @(OrderedMapSchema Char Int) Proxy
+-- pure orderedMapExample == (fromOutput @(OrderedMapSchema Char Int) Proxy
 --                            . toOutput @(OrderedMapSchema Char Int) Proxy) orderedMapExample
 -- :}
 -- True

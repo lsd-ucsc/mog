@@ -76,7 +76,7 @@ instance TupleToColList xs => TupleToColList (x, xs) where
 -- |
 --
 -- >>> toCL ("hello", 4, 'x')
--- "hello" :% (4 :% ('x' :% ()))
+-- "hello" :% (4 :% ('x' :% Ø_))
 toCL::
     ( ToTupleList b a
     , TupleToColList (TupleList (TupleOf b a))
@@ -86,7 +86,7 @@ toCL = toTTCL . toTL
 
 -- |
 --
--- >>> fromCL $ "hello" :% 4 :% 'x' :% () :: (String, Int, Char)
+-- >>> fromCL $ "hello" :% 4 :% 'x' :% Ø_ :: (String, Int, Char)
 -- ("hello",4,'x')
 fromCL::
     ( ToTupleList b a

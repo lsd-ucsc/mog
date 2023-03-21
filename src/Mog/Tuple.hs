@@ -6,7 +6,7 @@
 -- | Inductive tuple-lists
 module Mog.Tuple where
 
-import Data.Kind (Type, Constraint)
+import Data.Kind (Type)
 import Data.Proxy (Proxy(..))
 
 -- | Singleton tuple (this project uses 8.10.7 which doesn't have
