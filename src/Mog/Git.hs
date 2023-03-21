@@ -11,23 +11,19 @@
 -- The naming convention in here is currently following that of the Output module.
 module Mog.Git where
 
--- import Control.Exception (bracket)
-import Control.Applicative (liftA2)
-import Control.Monad ((<=<))
 import Control.Arrow (first, second)
-import Control.Monad.IO.Class (MonadIO(..))
-import Data.ByteString.Char8 (pack)
-import Data.ByteString.Lazy (ByteString, toStrict)
-import qualified Data.Map as Map
+import Control.Monad ((<=<))
+import qualified Data.ByteString.Char8 as Char8 (pack)
+import qualified Data.Text as Text (pack)
+import qualified Data.Text.Encoding as Text (encodeUtf8)
 
-import Crypto.Hash (hashlazy, Digest, SHA1)
 import qualified Git
 
 import qualified Mog.Output as Output
 
-data Col r
-    = Prim (Git.BlobOid r)
-    | Ref (Git.TreeOid r)
+data Field r
+    = Atom  (Git.BlobOid r)
+    | Group (Git.TreeOid r)
 
 -- TODO: consider how to store an Output.Database w/o erasing the other trees
 -- (Output.Datatype) in the same database
@@ -45,12 +41,12 @@ storeDatatype
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (sequence . second storeRelation)
-    .   fmap (first $ pack) -- FIXME: Packing a user-provided string here; should instead go via Text's encodeUtf8
-    .   Map.toList
+    .   fmap (first $ Text.encodeUtf8 . Text.pack)
+    .   snd -- FIXME: currently we just throw out the datatype name
 
 -- | Create a tree OID containing, for each row, a hash of the key mapped to an
 -- OID for the value. (Assumption: Key data is already in the value.)
-storeRelation :: Git.MonadGit r m => Output.Relation -> m (Git.TreeOid r)
+storeRelation :: Git.MonadGit r m => [Output.Tuple] -> m (Git.TreeOid r)
 storeRelation
     -- TODO: As an alternative to placing these configs at the datatype level,
     -- we can place them here by outputting the names of tuple columns:
@@ -61,18 +57,7 @@ storeRelation
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (sequence . second storeRow)
-    .   fmap (first $ pack . show . hashRow) -- XXX: packing a hex-digest of a hash, so Char8.pack should be safe
-    .   Map.toList
-
-hashRow :: Output.Row -> Digest SHA1
-hashRow = hashlazy . hashInputRow
-
-hashInputRow :: Output.Row -> ByteString
-hashInputRow = mconcat . fmap hashChunksCol
-
-hashChunksCol :: Output.Col -> ByteString
-hashChunksCol (Output.Atom bs) = bs
-hashChunksCol (Output.Group row) = hashInputRow row
+    .   fmap (first $ Char8.pack . show) -- XXX: packing a hex-digest of a hash, so Char8.pack should be safe
 
 -- | Create a tree OID containing, for each column, a tuple-index mapped to an OID.
 storeRow :: Git.MonadGit r m => Output.Row -> m (Git.TreeOid r)
@@ -83,15 +68,15 @@ storeRow
     =   Git.createTree
     .   mapM putCol
     <=< return
-    .   fmap (first $ pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
-    .   zip [0..]
+    .   fmap (first $ Char8.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
+    .   zip [0::Int ..]
     <=< mapM storeCol
   where
     putCol (name, col) = case col of
-        Prim bid -> Git.putBlob name bid
-        Ref tid -> Git.putTree name tid
+        Atom  bid -> Git.putBlob name bid
+        Group tid -> Git.putTree name tid
 
 -- | Create an OID for one column.
-storeCol :: Git.MonadGit r m => Output.Col -> m (Col r)
-storeCol (Output.Atom bs) = Prim <$> Git.createBlob (Git.BlobStringLazy bs)
-storeCol (Output.Group row) = Ref <$> storeRow row
+storeCol :: Git.MonadGit r m => Output.Col -> m (Field r)
+storeCol (Output.Atom bs) = Atom <$> Git.createBlob (Git.BlobStringLazy bs)
+storeCol (Output.Group row) = Group <$> storeRow row
