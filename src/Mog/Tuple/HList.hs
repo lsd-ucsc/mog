@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 -- | Quick and dirty conversion from tuples to :& and :% lists via tuple-lists.
 module Mog.Tuple.HList where
 
