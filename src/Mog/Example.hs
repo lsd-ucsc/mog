@@ -11,6 +11,7 @@ import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(..))
 
 import Mog.Schema
+import Mog.Index (type Index(..))
 import Mog.Instance
 
 -- $setup

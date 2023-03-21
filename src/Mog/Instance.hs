@@ -21,6 +21,7 @@ import Data.Type.Equality ((:~:)(..))
 import Data.Proxy (Proxy(..))
 
 import Mog.Schema
+import Mog.Index (type Index(..))
 
 
 

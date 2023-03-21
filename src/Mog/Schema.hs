@@ -20,6 +20,7 @@ module Mog.Schema (
 
 import Data.Type.Equality ((:~:)(..))
 import GHC.TypeLits (Symbol)
+import Mog.Index (type Index)
 
 
 
@@ -47,7 +48,6 @@ data c % cs
 -- | Tuple nil
 data Ø
 
-data Index = Here | There Index
 data Ref fk (index :: Index)
 data Prim a
 
