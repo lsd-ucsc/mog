@@ -41,10 +41,25 @@ qRob :: Ord a => Queue a -> Set (a, a)
 qRob (Queue []) = Set.empty
 qRob (Queue (x:xs)) = Set.fromList $ zip (x:xs) xs
 
-qAbstraction :: Ord a => Queue a -> (Set (a, a), Set a)
-qAbstraction q = (qRob q, qRmem q)
+-- ** MRDT
 
--- TODO: conversion to instance of schema
+-- TODO: also try the encoding that uses (Int:>a)
+instance Ord a => MRDT (Queue a) where
+    type Abstracted (Queue a) =
+        Dt "queue"
+        ( "ob"  :::: Set (a:@1, a:@1)
+        , "mem" :::: Set a
+        )
+    α q = Dt
+        ( Rel . Set.map (bimap Ref Ref) $ qRob q
+        , Rel $ qRmem q
+        )
+--  α (Queue xs) = Dt
+--      ( Rel $ case Ref <$> xs of
+--              [] -> Set.empty
+--              y:ys -> Set.fromList $ zip (y:ys) ys
+--      , Rel $ Set.fromList xs
+--      )
 
 
 

@@ -65,12 +65,16 @@ _testInst26 = Refl
 
 -- * Queue
 
-type QueueSchema a =
+type QueueSchema prim =
     Schema "queue"
-    ( Table "ob" (Ref (Prim a % Ø) 'Here % Ref (Prim a % Ø) 'Here % Ø ↦ Ø)
-    & Table "mem" (Prim a % Ø ↦ Ø)
+    ( Table "ob" (Ref (Prim prim % Ø) 'Here % Ref (Prim prim % Ø) 'Here % Ø ↦ Ø)
+    & Table "mem" (Prim prim % Ø ↦ Ø)
     & TablesEnd
     )
+
+_testToSchema30 :: ToSchema (Abstracted (Queue String))
+                :~: QueueSchema String
+_testToSchema30 = Refl
 
 _testValid30 :: Proxy (QueueSchema a)
 _testValid30 = _testValid Proxy
@@ -105,9 +109,6 @@ queueInstance =
 
 -- * Ordered map
 
--- | This exmple schema is only applicable for an ordered map with primitive
--- keys and primitive values. If a user has tuples for keys or values, we would
--- encode each element of those tuples as a separate blob in git.
 type OrderedMapSchema primK primV =
     Schema "ordered-map"
     ( Table "ord" ( Ref (Prim primK % Ø) ('There 'Here) % Ref (Prim primK % Ø) ('There 'Here) % Ø
