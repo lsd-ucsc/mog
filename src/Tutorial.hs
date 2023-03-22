@@ -140,7 +140,7 @@ omRkeys = Map.keysSet . omMap
 
 -- ** MRDT
 
-instance (Ord k, MRDT v) => MRDT (OrderedMap k v) where
+instance (Ord k{-, MRDT v-}) => MRDT (OrderedMap k v) where
 
     type Abstracted (OrderedMap k v) =
         Dt "ordered-map"
