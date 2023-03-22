@@ -157,7 +157,7 @@ instance (Ord k, MRDT v) => MRDT (OrderedMap k v) where
 --  α om = Dt
 --      ( Rel $ case Ref <$> omOrder om of
 --              [] -> Set.empty
---              (k:ks) -> Set.fromList $ zip (k:ks) ks
+--              k:ks -> Set.fromList $ zip (k:ks) ks
 --      , Rel $ Map.mapKeys Ref $ omMap om
 --      , Rel $ Map.keysSet $ omMap om
 --      )
