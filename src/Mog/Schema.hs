@@ -14,8 +14,6 @@ module Mog.Schema (
 
   type Ref,
   type Prim,
-
-  Index(..),
 ) where
 
 import Data.Type.Equality ((:~:)(..))
