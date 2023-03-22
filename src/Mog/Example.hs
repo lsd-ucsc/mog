@@ -13,6 +13,9 @@ import Data.Type.Equality ((:~:)(..))
 import Mog.Schema
 import Mog.Index (type Index(..))
 import Mog.Instance
+import Mog.UI
+import Mog
+import Tutorial
 
 -- $setup
 -- >>> :set -XTypeApplications
@@ -102,21 +105,26 @@ queueInstance =
 
 -- * Ordered map
 
-type OrderedMapSchema k v =
+-- | This exmple schema is only applicable for an ordered map with primitive
+-- keys and primitive values. If a user has tuples for keys or values, we would
+-- encode each element of those tuples as a separate blob in git.
+type OrderedMapSchema primK primV =
     Schema "ordered-map"
-    ( Table "ord" ( Ref (Prim k % Ø) ('There 'Here)
-                  % Ref (Prim k % Ø) ('There 'Here)
-                  % Ø
-                  ↦ Ø )
-    & Table "map" ( Ref (Prim k % Ø) 'Here
-                  % Ø
-                  ↦ Prim v
-                  % Ø)
-    & Table "keys" ( Prim k
-                   % Ø
-                   ↦ Ø)
+    ( Table "ord" ( Ref (Prim primK % Ø) ('There 'Here) % Ref (Prim primK % Ø) ('There 'Here) % Ø
+                  ↦ Ø
+                  )
+    & Table "map" ( Ref (Prim primK % Ø) 'Here % Ø
+                  ↦ Prim primV % Ø
+                  )
+    & Table "keys" ( Prim primK % Ø
+                   ↦ Ø
+                   )
     & TablesEnd
     )
+
+_testToSchema40 :: ToSchema (Abstracted (OrderedMap String Int))
+                :~: OrderedMapSchema String Int
+_testToSchema40 = Refl
 
 _testValid40 :: Proxy (OrderedMapSchema k v)
 _testValid40 = _testValid Proxy

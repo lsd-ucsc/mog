@@ -73,12 +73,6 @@ _testPrec10 ::  "mapping" ∷   k:@1  ↦ v
             :~: "mapping" ∷ ((k:@1) ↦ v)
 _testPrec10 = Refl
 
--- TODO: complete this, and probably define it elsewhere
-class {-Relations (Abstracted a) =>-} MRDT a where
-    type Abstracted a :: Type
-    α :: a -> Abstracted a
-    γ :: Abstracted a -> a
-
 
 
 

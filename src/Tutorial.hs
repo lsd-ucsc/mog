@@ -1,12 +1,17 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
 module Tutorial where
 
+import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.List as List
 import qualified Data.Map as Map hiding (Map)
 import qualified Data.Set as Set hiding (Set)
 
+import Mog
 
 
 
@@ -45,6 +50,8 @@ qAbstraction q = (qRob q, qRmem q)
 
 
 -- * Ordered map
+
+-- ** Implementation
 
 data OrderedMap k v = OrderedMap { omMap :: Map k v, omOrder :: [k] }
 
@@ -103,3 +110,39 @@ omDelete k om@OrderedMap{omMap,omOrder} =
 omPop :: Ord k => OrderedMap k v -> Maybe (OrderedMap k v, k, v)
 omPop OrderedMap{omOrder=[]} = Nothing
 omPop om@OrderedMap{omOrder=(k:_)} = omLookup k om >>= \v -> pure (omDelete k om, k, v)
+
+-- *** Characteristic relations
+
+omRord :: Ord k => OrderedMap k v -> Set (k, k)
+omRord OrderedMap{omOrder=[]} = Set.empty
+omRord OrderedMap{omOrder=(k:ks)} = Set.fromList $ zip (k:ks) ks
+
+omRmap :: OrderedMap k v -> Map k v
+omRmap = omMap
+
+omRkeys :: OrderedMap k v -> Set k
+omRkeys = Map.keysSet . omMap
+
+-- ** MRDT
+
+instance (Ord k, MRDT v) => MRDT (OrderedMap k v) where
+
+    type Abstracted (OrderedMap k v) =
+        Dt "ordered-map"
+        ( "ord"  :::: Set (k:@2, k:@2)
+        , "map"  :::: k:@1 :> v
+        , "keys" :::: Set k
+        )
+
+    α om = Dt
+        ( Rel . Set.map (bimap Ref Ref) $ omRord om
+        , Rel . Map.mapKeys Ref $ omMap om
+        , Rel $ omRkeys om
+        )
+--  α om = Dt
+--      ( Rel $ case Ref <$> omOrder om of
+--              [] -> Set.empty
+--              (k:ks) -> Set.fromList $ zip (k:ks) ks
+--      , Rel $ Map.mapKeys Ref $ omMap om
+--      , Rel $ Map.keysSet $ omMap om
+--      )
