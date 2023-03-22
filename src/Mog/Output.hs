@@ -23,6 +23,8 @@ import Mog.Schema
 import Mog.Instance
 
 -- $setup
+-- >>> :set -XTypeOperators
+-- >>> :set -XDataKinds
 -- >>> import Mog.Example
 -- >>> import Mog.Index
 

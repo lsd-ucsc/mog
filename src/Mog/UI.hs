@@ -1,11 +1,7 @@
--- {-# LANGUAGE ScopedTypeVariables, TypeApplications #-}
 {-# LANGUAGE TypeFamilies, DataKinds #-} -- TypeFamilies implies KindSignatures,ExplictNamespaces
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-} -- implies TypeSynonymInstances
--- {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
--- {-# LANGUAGE LambdaCase #-}
--- {-# LANGUAGE LambdaCase #-}
 -- FIXME: undecidable-instances here lets us convert to our hetlist.
 {-# LANGUAGE UndecidableInstances #-}
 module Mog.UI where
@@ -25,6 +21,8 @@ import qualified Mog.Schema as S
 import Mog.Instance
 
 -- $setup
+-- >>> :set -XTypeOperators
+-- >>> :set -XDataKinds
 -- >>> import Mog (MRDT(α, γ, Abstracted))
 -- >>> import Tutorial
 
