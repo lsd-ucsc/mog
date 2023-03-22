@@ -64,8 +64,8 @@ _testPrec10 = Refl
 
 -- * Conversion to schema
 
-type family ToSchema a :: Type where
-    ToSchema (Dt name rels) = S.Schema name (ToSchemaRelsTL rels)
+type family SchemaFor a :: Type where
+    SchemaFor (Dt name rels) = S.Schema name (ToSchemaRelsTL rels)
 
 type ToSchemaRelsTL x = ToSchemaRels (TupleList (TupleOf (IsTuple x) x)) -- UndecidableInstances (nested tyfams)
 
@@ -100,8 +100,8 @@ type family ToSchemaCol (b::Bool) a :: Type where
 -- >>> α om == dtUser @(Abstracted (OrderedMap String Int)) (dtInst (α om))
 -- True
 class DtC u where
-    dtInst :: u -> Inst (ToSchema u)
-    dtUser :: Inst (ToSchema u) -> u
+    dtInst :: u -> Inst (SchemaFor u)
+    dtUser :: Inst (SchemaFor u) -> u
 instance
         ( ToTupleList b rels -- UndecidableInstances (variable not in head)
         , RelsC (TupleList (TupleOf b rels)) -- UndecidableInstances (nesting)

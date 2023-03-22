@@ -72,7 +72,7 @@ type QueueSchema prim =
     & TablesEnd
     )
 
-_testToSchema30 :: ToSchema (Abstracted (Queue String))
+_testToSchema30 :: SchemaFor (Abstracted (Queue String))
                 :~: QueueSchema String
 _testToSchema30 = Refl
 
@@ -123,7 +123,7 @@ type OrderedMapSchema primK primV =
     & TablesEnd
     )
 
-_testToSchema40 :: ToSchema (Abstracted (OrderedMap String Int))
+_testToSchema40 :: SchemaFor (Abstracted (OrderedMap String Int))
                 :~: OrderedMapSchema String Int
 _testToSchema40 = Refl
 
