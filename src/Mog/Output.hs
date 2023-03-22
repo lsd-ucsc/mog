@@ -24,6 +24,7 @@ import Mog.Instance
 
 -- $setup
 -- >>> import Mog.Example
+-- >>> import Mog.Index
 
 
 
