@@ -25,6 +25,10 @@ dependencies:
   - filepath
   - directory
   - unordered-containers
+  - tagged
+  - process
+  - network
+  - optparse-generic
 
 ghc-options:
   - -Wall
