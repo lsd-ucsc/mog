@@ -111,3 +111,41 @@ safeGitConfig gc =
     case parseGitConfig $ showGitConfig gc of
         Left{} -> False
         Right gc' -> gc == gc'
+
+
+
+
+-- * Merge driver
+
+-- | <https://git-scm.com/docs/gitattributes#_built_in_merge_drivers>
+data MergeDriver = MergeDriver
+    { mdName :: Text
+    , mdCommand :: Text
+    , mdRecursiveMD :: Maybe Text
+    }
+
+-- | Merge driver identifier should be ascii letters and numbers without spaces or
+-- punctuation.
+mergeDriverSection :: Text -> MergeDriver -> GCP.Section
+mergeDriverSection mdID MergeDriver{mdName,mdCommand,mdRecursiveMD} =
+    GCP.Section ["merge", mdID]
+        . HashMap.fromList
+        $ [ ("name", mdName)
+          , ("driver", mdCommand)
+          ]
+        ++ (maybe [] (\n -> [("recursive", n)]) mdRecursiveMD)
+
+-- | Update or remove a merge driver in the git config.
+setMergeDriver :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => Text -> Maybe MergeDriver -> m (Either String ())
+setMergeDriver mdID mdM = do
+    parsed <- parseGitConfig <$> readGitConfig
+    case parsed of
+        Left err -> return $ Left err
+        Right config
+            | safeGitConfig config -> writeGitConfig $ updatedConfig config
+            | otherwise -> return $ Left "not safe to overwrite existing git config"
+  where
+    match (GCP.Section ["merge", otherID] _) = mdID == otherID
+    updatedConfig (GitConfig sections) = GitConfig $ case mdM of
+        Nothing -> filter (not . match) sections -- XXX filter is "keep"
+        Just md -> sections ++ [mergeDriverSection mdID md]
