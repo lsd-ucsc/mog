@@ -1,22 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
--- | Module for interacting with a git backend to output/input a
--- 'Output.Database' value to/from disk
+-- | Git operations not necessarily specific to mog.
 --
 -- The functions in this module are monomorphic over the "gitlib" backend;
 -- specifically they use the "gitlib-libgit2" backend.
-module Mog.GitLibgit where
+module Mog.Git.Libgit where
 
-import Control.Exception (assert)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Bifunctor (bimap)
-import Data.Foldable (toList)
 import Data.List (intersperse)
 import Data.Text (Text)
 import System.FilePath ((</>))
-import Data.HashMap.Strict as HashMap (toList)
+import qualified Data.HashMap.Strict as HashMap (toList, fromList)
 import qualified Data.Text as Text hiding (Text)
 import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as TL
@@ -40,23 +38,45 @@ withRepo path action = do
             }
         action
 
-gitConfigPath :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m FilePath
-gitConfigPath = do
+
+
+-- * Paths
+
+newtype Gitdir = Gitdir FilePath
+
+getGitdir :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m Gitdir
+getGitdir = do
     opts <- GLG2.repoOptions <$> Git.getRepository
-    return $
+    return . Gitdir $
         if Git.repoIsBare opts
-        then Git.repoPath opts </> "config"
-        else Git.repoPath opts </> ".git" </> "config"
+        then Git.repoPath opts
+        else Git.repoPath opts </> ".git"
+
+
+
+
+-- * Git config
 
 newtype GitConfig = GitConfig GCP.GitConfig deriving Eq
 
 instance Show GitConfig where
     show = Text.unpack . showGitConfig
 
+gitConfigPath :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m FilePath
+gitConfigPath = do
+    Gitdir repoRoot <- getGitdir
+    return $ repoRoot </> "config"
+
 readGitConfig :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m Text
-readGitConfig = do
-    path <- gitConfigPath
-    liftIO $ TIO.readFile path
+readGitConfig = liftIO . TIO.readFile =<< gitConfigPath
+
+writeGitConfig :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => GitConfig -> m (Either String ())
+writeGitConfig config
+    | safeGitConfig config = do
+        path <- gitConfigPath
+        liftIO . TIO.writeFile path $ showGitConfig config
+        return $ pure ()
+    | otherwise = return $ Left "not safe to write new git config"
 
 showGitConfig :: GitConfig -> Text
 showGitConfig (GitConfig sections)
@@ -74,16 +94,20 @@ showGitConfig (GitConfig sections)
         . fmap (bimap fromStrict fromStrict)
         . HashMap.toList
 
--- | Parse, pretty-print, parse again, and verify that both parsings returned
--- the same result. This ensures that we can faithfully pretty-print by using
--- the parser to detect bad pretty-printings.
 parseGitConfig :: Text -> Either String GitConfig
-parseGitConfig raw = do
-    let parseRaw = bimap show id . GCP.parseConfig
-        mapErr f = bimap f id
-    parsed <- parseRaw raw
-    reparsed <- mapErr ("bug: Failed to parse git-config after pretty-printing:\n" ++)
-        . parseRaw . showGitConfig $ GitConfig parsed
-    if parsed == reparsed
-    then return $ GitConfig parsed
-    else Left "bug: Pretty-printer does not faithfully represent git-config"
+parseGitConfig = bimap show GitConfig . GCP.parseConfig
+
+-- | Helper for validating our git config serializer against the parser.
+--
+--  * Did parsing produce a correct result? Assume yes.
+--
+--  * Can we safely write the parsed config back to disk? Yes if it parses to
+--  the same value again after serialization.
+--
+--  * Can we safely modify the parsed config and write it back to disk? Yes if
+--  it parses to the same value again after serialization.
+safeGitConfig :: GitConfig -> Bool
+safeGitConfig gc =
+    case parseGitConfig $ showGitConfig gc of
+        Left{} -> False
+        Right gc' -> gc == gc'
