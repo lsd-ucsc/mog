@@ -25,6 +25,43 @@ import qualified Git
 import qualified Git.Libgit2 as GLG2
 import qualified Text.GitConfig.Parser as GCP
 
+
+
+
+-- * Initialization
+
+data Config
+    = Init{local::FilePath}
+    | Clone{local::FilePath, origin::String}
+    | Open{local::FilePath}
+
+-- * Init: I don't have a repo on disk yet, and I'm starting a new one
+-- * Clone: I don't have a repo on disk yet, and I'm starting from somebody else's repo
+-- * Open: I do have a repo on disk already
+--
+-- @@
+-- withRepo =
+--     Ini Clo Ope
+--     [x] [x] [ ] require the path "local" does not already exist
+--     [T] [T] [?] set RepoOptions.IsBare [for open use: not(exists(local/.git)); emit a warning if IsBare is False]
+--     [T] [T] [F] set RepoOptions.AutoCreate
+--     XXXXXXXXXXX call withRepository'
+--                     [DO NOT USE withRepository (takes no options) NOR withNewRepository NOR withNewRepository' (these delete the directory if it is already present)]
+--     XXXXXXXXXXX bracket: (mutual exclusion)
+--                     [acquire: symlink repo/mog.pid↦PID, read repo/mog.pid, and assert correct; use unix:System.Posix.getProcessID]
+--                     [release: delete repo/mog.pid]
+--     XXXXXXXXXXX bracket: (merge driver handler)
+--                     [acquire: open listening socket]
+--                     [release: close socket]
+--     XXXXXXXXXXX withAsync (merge driver handler thread)
+--     XXXXXXXXXXX bracket: (gitconfig)
+--                     [acquire: install merge-driver cli]
+--                     [release: uninstall]
+--     XXXXXXXXXXX bracket: (gitattributes)
+--                     [acquire: (gitattributes) associate pk/val extensions with binary/custom merge drivers (resp)]
+--                     [release: remove associations]
+--     XXXXXXXXXXX user-action
+-- @@
 withRepo :: GLG2.MonadLg m => FilePath -> ReaderT GLG2.LgRepo m a -> m a
 withRepo path action = do
     notBare <- liftIO . Dir.doesPathExist $ path </> ".git"
