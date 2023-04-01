@@ -70,13 +70,13 @@ storeRow
     <=< return
     .   fmap (first $ Char8.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
     .   zip [0::Int ..]
-    <=< mapM storeCol
+    <=< mapM storeField
   where
     putCol (name, col) = case col of
         Atom  bid -> Git.putBlob name bid
         Group tid -> Git.putTree name tid
 
 -- | Create an OID for one column.
-storeCol :: Git.MonadGit r m => Output.Col -> m (Field r)
-storeCol (Output.Atom bs) = Atom <$> Git.createBlob (Git.BlobStringLazy bs)
-storeCol (Output.Group row) = Group <$> storeRow row
+storeField :: Git.MonadGit r m => Output.Field -> m (Field r)
+storeField (Output.Atom bs) = Atom <$> Git.createBlob (Git.BlobStringLazy bs)
+storeField (Output.Group row) = Group <$> storeRow row

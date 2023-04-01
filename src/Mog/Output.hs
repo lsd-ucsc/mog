@@ -43,14 +43,13 @@ type Relation = (String, [Tuple])
 type Tuple = (Digest SHA1, Row)
 
 -- | CBOR encoded columns representing a db-tuple.
-type Row = [Col]
+type Row = [Field]
 
 -- | A column is either a single atom or group of columns.
-data Col
+data Field
     = Atom  ByteString
     | Group Row
     deriving Show
--- TODO Rename Col to Field
 
 
 
@@ -88,7 +87,7 @@ hashRow = hashlazy . hashInputRow
 hashInputRow :: Row -> ByteString
 hashInputRow = mconcat . fmap hashChunksCol
 
-hashChunksCol :: Col -> ByteString
+hashChunksCol :: Field -> ByteString
 hashChunksCol (Atom bs) = bs
 hashChunksCol (Group row) = hashInputRow row
 
@@ -207,7 +206,7 @@ instance (Convert pk pk' Row, Convert v v' Row, RowWidth pk, Ord pk')
                 then pure (pk,v)
                 else Left WrongPkHash{gotHash=hash, expectedHash=hashRow pk})
 
-instance (Convert c c' Col, Convert cs cs' Row)
+instance (Convert c c' Field, Convert cs cs' Row)
       => Convert (c % cs) (c' :% cs') Row where
     convertTo _ (c :% cs) = convertTo @c  Proxy c
                           : convertTo @cs Proxy cs
@@ -220,12 +219,12 @@ instance Convert Ø Ø_ Row where
     convertFrom _ []    = pure Ø_
     convertFrom _ (_:_) = Left TooManyColumns
 
-instance (Serialise a) => Convert (Prim a) a Col where
+instance (Serialise a) => Convert (Prim a) a Field where
     convertFrom _ (Atom  x) = bimap DeserialiseFailure id $ deserialiseOrFail x
     convertFrom _ (Group _) = Left GotGroup'ExpectedAtom
     convertTo   _           = Atom . serialise
 
-instance (Convert fk fk' Row) => Convert (Ref fk index) fk' Col where
+instance (Convert fk fk' Row) => Convert (Ref fk index) fk' Field where
     convertFrom _ (Atom  _) = Left GotAtom'ExpectedGroup
     convertFrom _ (Group x) = convertFrom @fk Proxy x
     convertTo   _           = Group . convertTo @fk Proxy
