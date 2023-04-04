@@ -22,7 +22,7 @@ import qualified Git
 import qualified Mog.Output as Output
 
 data Field r
-    = Atom  (Git.BlobOid r)
+    = Atom  (Git.BlobOid r) Output.Role
     | Group (Git.TreeOid r)
 
 -- TODO: consider how to store an Output.Database w/o erasing the other trees
@@ -68,15 +68,22 @@ storeRow
     =   Git.createTree
     .   mapM putCol
     <=< return
+    .   map addExt
     .   fmap (first $ Char8.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
     .   zip [0::Int ..]
     <=< mapM storeField
   where
     putCol (name, col) = case col of
-        Atom  bid -> Git.putBlob name bid
-        Group tid -> Git.putTree name tid
+        Atom  bid role -> Git.putBlob name bid
+        Group tid      -> Git.putTree name tid
+    addExt (name, col) =
+        let ext = case col of
+                Atom  bid Output.Pk  -> "pk"
+                Atom  bid Output.Val -> "val"
+                Group tid            -> "fk"
+        in (name <> "." <> ext, col)
 
 -- | Create an OID for one column.
 storeField :: Git.MonadGit r m => Output.Field -> m (Field r)
-storeField (Output.Atom bs) = Atom <$> Git.createBlob (Git.BlobStringLazy bs)
-storeField (Output.Group row) = Group <$> storeRow row
+storeField (Output.Atom bs role) = Atom <$> Git.createBlob (Git.BlobStringLazy bs) <*> return role
+storeField (Output.Group row)    = Group <$> storeRow row
