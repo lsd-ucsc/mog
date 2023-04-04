@@ -45,9 +45,13 @@ type Tuple = (Digest SHA1, Row)
 -- | CBOR encoded columns representing a db-tuple.
 type Row = [Field]
 
+-- | Whether a leave element is in the PK or not. Some day, might be a string.
+data Role = Pk | Val
+    deriving (Eq, Show)
+
 -- | A column is either a single atom or group of columns.
 data Field
-    = Atom  ByteString
+    = Atom  ByteString Role
     | Group Row
     deriving Show
 
@@ -88,7 +92,7 @@ hashInputRow :: Row -> ByteString
 hashInputRow = mconcat . fmap hashChunksCol
 
 hashChunksCol :: Field -> ByteString
-hashChunksCol (Atom bs) = bs
+hashChunksCol (Atom bs _) = bs
 hashChunksCol (Group row) = hashInputRow row
 
 
@@ -110,6 +114,7 @@ data RestoreError
     | WrongPkHash {gotHash::Digest SHA1, expectedHash::Digest SHA1}
     | GotGroup'ExpectedAtom
     | GotAtom'ExpectedGroup
+    | WrongRole {gotRole::Role, expectedRole::Role}
     | DeserialiseFailure DeserialiseFailure
     deriving (Eq, Show)
 
@@ -166,7 +171,7 @@ instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
 -- >>> type Eg0 = Prim String % Ø ↦ Ø
 -- >>> eg0 = [("hello":%Ø_, Ø_), ("world":%Ø_, Ø_)]
 -- >>> convertTo @Eg0 @_ @[Tuple] Proxy eg0
--- [(34...af,[Atom "ehello"]),(70...e2,[Atom "eworld"])]
+-- [(34...af,[Atom "ehello" Pk]),(70...e2,[Atom "eworld" Pk])]
 -- >>> Right eg0 == convertFrom @Eg0 @_ @[Tuple] Proxy (convertTo @Eg0 @_ @[Tuple] Proxy eg0)
 -- True
 --
@@ -175,7 +180,7 @@ instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
 -- >>> type Eg1 = Prim String % Prim String % Ø ↦ Ø
 -- >>> eg1 = [("a":%"bc":%Ø_, Ø_), ("ab":%"c":%Ø_, Ø_)]
 -- >>> convertTo @Eg1 @_ @[Tuple] Proxy eg1
--- [(fb...d0,[Atom "aa",Atom "bbc"]),(5c...db,[Atom "bab",Atom "ac"])]
+-- [(fb...d0,[Atom "aa" Pk,Atom "bbc" Pk]),(5c...db,[Atom "bab" Pk,Atom "ac" Pk])]
 -- >>> Right eg1 == convertFrom @Eg1 @_ @[Tuple] Proxy (convertTo @Eg1 @_ @[Tuple] Proxy eg1)
 -- True
 --
@@ -184,21 +189,28 @@ instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
 -- >>> type Eg3 = Ref (Prim String % Ø) 'Here % Ø ↦ Prim Int % Ø
 -- >>> eg3 = [(("three":%Ø_):%Ø_, 3:%Ø_), (("two":%Ø_):%Ø_, 2:%Ø_), (("one":%Ø_):%Ø_, 1:%Ø_)]
 -- >>> convertTo @Eg3 @_ @[Tuple] Proxy eg3
--- [(83...7c,[Group [Atom "ethree"],Atom "\ETX"]),(7f...ee,[Group [Atom "ctwo"],Atom "\STX"]),(be...20,[Group [Atom "cone"],Atom "\SOH"])]
+-- [(83...7c,[Group [Atom "ethree" Pk],Atom "\ETX" Val]),(7f...ee,[Group [Atom "ctwo" Pk],Atom "\STX" Val]),(be...20,[Group [Atom "cone" Pk],Atom "\SOH" Val])]
 -- >>> Right eg3 == convertFrom @Eg3 @_ @[Tuple] Proxy (convertTo @Eg3 @_ @[Tuple] Proxy eg3)
 -- True
-instance (Convert pk pk' Row, Convert v v' Row, RowWidth pk, Ord pk')
-      => Convert (pk ↦ v) (Assoc pk' v') [Tuple] where
+instance
+        ( RowWidth pk
+        , ConvertRow pk
+        , ConvertRow v
+        , Inst pk ~ pk'
+        , Inst v  ~ v'
+        , Ord pk'
+        ) =>
+    Convert (pk ↦ v) (Assoc pk' v') [Tuple] where
     convertTo _
         = map (\(pk,v) -> (hashRow pk, pk <> v))
         . map (bimap
-            (convertTo @pk Proxy)
-            (convertTo @v Proxy))
+            (toRow @pk Proxy Pk)
+            (toRow @v  Proxy Val))
     convertFrom _
         --  Convert both elements of each pair
         =   mapM (\(pk,v) -> liftA2 (,)
-                (convertFrom @pk Proxy pk)
-                (convertFrom @v Proxy v))
+                (fromRow @pk Proxy Pk pk)
+                (fromRow @v  Proxy Val v))
         --  Take the pk from the row, verify the hash, return the key & value
         <=< mapM (\(hash,row) ->
                 let (pk,v) = splitAt (rowWidth @pk Proxy) row in
@@ -206,25 +218,35 @@ instance (Convert pk pk' Row, Convert v v' Row, RowWidth pk, Ord pk')
                 then pure (pk,v)
                 else Left WrongPkHash{gotHash=hash, expectedHash=hashRow pk})
 
-instance (Convert c c' Field, Convert cs cs' Row)
-      => Convert (c % cs) (c' :% cs') Row where
-    convertTo _ (c :% cs) = convertTo @c  Proxy c
-                          : convertTo @cs Proxy cs
-    convertFrom _ []     = Left TooFewColumns
-    convertFrom _ (x:xs) = liftA2 (:%) (convertFrom @c  Proxy x)
-                                       (convertFrom @cs Proxy xs)
 
-instance Convert Ø Ø_ Row where
-    convertTo   _ Ø_    = []
-    convertFrom _ []    = pure Ø_
-    convertFrom _ (_:_) = Left TooManyColumns
+class ConvertRow a where
+    toRow   :: Proxy a -> Role -> Inst a -> Row
+    fromRow :: Proxy a -> Role -> Row    -> Option (Inst a)
 
-instance (Serialise a) => Convert (Prim a) a Field where
-    convertTo   _           = Atom . serialise
-    convertFrom _ (Atom  x) = bimap DeserialiseFailure id $ deserialiseOrFail x
-    convertFrom _ (Group _) = Left GotGroup'ExpectedAtom
+instance (ConvertCol c, ConvertRow cs) => ConvertRow (c % cs) where
+    toRow _ role (c :% cs) = toCol @c  Proxy role c
+                           : toRow @cs Proxy role cs
+    fromRow _ _role []     = Left TooFewColumns
+    fromRow _  role (x:xs) = liftA2 (:%) (fromCol @c  Proxy role x)
+                                         (fromRow @cs Proxy role xs)
 
-instance (Convert fk fk' Row) => Convert (Ref fk index) fk' Field where
-    convertTo   _           = Group . convertTo @fk Proxy
-    convertFrom _ (Atom  _) = Left GotAtom'ExpectedGroup
-    convertFrom _ (Group x) = convertFrom @fk Proxy x
+instance ConvertRow Ø where
+    toRow   _ _r Ø_    = []
+    fromRow _ _r []    = pure Ø_
+    fromRow _ _r (_:_) = Left TooManyColumns
+
+
+class ConvertCol a where
+    toCol   :: Proxy a -> Role -> Inst a -> Field
+    fromCol :: Proxy a -> Role -> Field  -> Option (Inst a)
+
+instance Serialise a => ConvertCol (Prim a) where
+    toCol   _  role x                      = Atom (serialise x) role
+    fromCol _  role (Atom x r) | role == r = bimap DeserialiseFailure id $ deserialiseOrFail x
+                               | otherwise = Left WrongRole{gotRole=r, expectedRole=role}
+    fromCol _ _role (Group _)              = Left GotGroup'ExpectedAtom
+
+instance ConvertRow fk => ConvertCol (Ref fk index) where
+    toCol   _ _r            = Group . toRow @fk Proxy Pk
+    fromCol _ _r (Atom _ _) = Left GotAtom'ExpectedGroup
+    fromCol _ _r (Group x)  = fromRow @fk Proxy Pk x
