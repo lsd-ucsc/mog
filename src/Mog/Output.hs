@@ -220,11 +220,11 @@ instance Convert Ø Ø_ Row where
     convertFrom _ (_:_) = Left TooManyColumns
 
 instance (Serialise a) => Convert (Prim a) a Field where
+    convertTo   _           = Atom . serialise
     convertFrom _ (Atom  x) = bimap DeserialiseFailure id $ deserialiseOrFail x
     convertFrom _ (Group _) = Left GotGroup'ExpectedAtom
-    convertTo   _           = Atom . serialise
 
 instance (Convert fk fk' Row) => Convert (Ref fk index) fk' Field where
+    convertTo   _           = Group . convertTo @fk Proxy
     convertFrom _ (Atom  _) = Left GotAtom'ExpectedGroup
     convertFrom _ (Group x) = convertFrom @fk Proxy x
-    convertTo   _           = Group . convertTo @fk Proxy
