@@ -80,27 +80,34 @@ storeRow
     -- Foreign keys are always referring to primary keys which don't merge
     -- (merge=binary).
     =   Git.createTree
-    .   mapM putCol
+    .   mapM (uncurry putCol)
     <=< return
     .   map addExt
-    .   fmap (first $ Char8.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
+    .   map (first $ Char8.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
     .   zip [0::Int ..]
     <=< mapM storeField
   where
-    putCol (name, col) = case col of
-        Atom  bid role -> Git.putBlob name bid
-        Group tid      -> Git.putTree name tid
     addExt (name, col) =
         let ext = case col of
-                Atom  bid Output.Pk  -> "pk"
-                Atom  bid Output.Val -> "val"
-                Group tid            -> "fk"
+                Atom  _bid Output.Pk  -> "pk"
+                Atom  _bid Output.Val -> "val"
+                Group _tid            -> "fk"
         in (name <> "." <> ext, col)
 
 -- | Create an OID for one column.
 storeField :: Git.MonadGit r m => Output.Field -> m (Field r)
 storeField (Output.Atom bs role) = Atom <$> Git.createBlob (Git.BlobStringLazy bs) <*> return role
 storeField (Output.Group row)    = Group <$> storeRow row
+
+-- ** Store-pass utilities
+
+-- | @putCol (path, column)@ puts the column value into the contextual-tree at the
+-- specified path.
+putCol :: Git.MonadGit r m => Git.TreeFilePath -> Field r -> Git.TreeT r m ()
+putCol name col =
+    case col of
+        Atom  bid _role -> Git.putBlob name bid
+        Group tid       -> Git.putTree name tid
 
 
 
