@@ -29,6 +29,7 @@ dependencies:
   - process
   - network
   - optparse-generic
+  - regex-tdfa
 
 ghc-options:
   - -Wall
