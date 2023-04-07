@@ -13,7 +13,7 @@ module Mog.Git where
 import Control.Arrow (first, second)
 import Control.Monad ((<=<))
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Except (ExceptT(..))
+import Control.Monad.Trans.Except (ExceptT(..), throwE)
 import Data.Bifunctor (bimap)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
@@ -36,8 +36,8 @@ import qualified Mog.Output as Output
 -- * Storage format to git blob/trees
 
 data Field r
-    = Atom  (Git.BlobOid r) Output.Tag
-    | Group (Git.TreeOid r)
+    = Blob (Git.BlobOid r) Output.Tag
+    | Tree (Git.TreeOid r)
 
 -- TODO: consider how to store an Output.Database w/o erasing the other trees
 -- (Output.Datatype) in the same database
@@ -88,13 +88,13 @@ storeRow
     <=< mapM storeField
   where
     addExt (name, col) = case col of
-        Atom  _bid tag -> (name <> "." <> Char8.pack tag, col)
-        Group _tid     -> (name <> ".fk",      col)
+        Blob _bid tag -> (name <> "." <> Char8.pack tag, col)
+        Tree _tid     -> (name <> ".fk",      col)
 
 -- | Create an OID for one column.
 storeField :: Git.MonadGit r m => Output.Col -> m (Field r)
-storeField (Output.Atom bs tag) = Atom <$> Git.createBlob (Git.BlobStringLazy bs) <*> return tag
-storeField (Output.Group row)   = Group <$> storeRow row
+storeField (Output.Atom bs tag) = Blob <$> Git.createBlob (Git.BlobStringLazy bs) <*> return tag
+storeField (Output.Group row)   = Tree <$> storeRow row
 
 -- ** Store-pass utilities
 
@@ -103,8 +103,8 @@ storeField (Output.Group row)   = Group <$> storeRow row
 putCol :: Git.MonadGit r m => Git.TreeFilePath -> Field r -> Git.TreeT r m ()
 putCol name col =
     case col of
-        Atom  bid _ext -> Git.putBlob name bid
-        Group tid      -> Git.putTree name tid
+        Blob bid _ext -> Git.putBlob name bid
+        Tree tid      -> Git.putTree name tid
 
 
 
@@ -114,14 +114,15 @@ putCol name col =
 type Option = Either LoadError
 
 data LoadError
-    = WrongIndex{gotIndex::Int, expectedIndex::Int}
+    = UnexpectedCommitTreeEntry
+    | WrongIndex{gotIndex::Int, expectedIndex::Int}
     | InvalidFilename Text
     | UnicodeException UnicodeException
     deriving Show
 
 loadField :: Git.MonadGit r m => Field r -> ExceptT LoadError m Output.Col
-loadField (Atom  bid role) = lift $ Output.Atom <$> Git.catBlobLazy bid <*> return role
-loadField (Group tid)      = Output.Group <$> loadRowT tid
+loadField (Blob bid tag) = lift $ Output.Atom <$> Git.catBlobLazy bid <*> return tag
+loadField (Tree tid)     = Output.Group <$> loadRowT tid
 
 loadRowT :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m Output.Row
 loadRowT tid =
@@ -182,8 +183,9 @@ matchIndexLoadExt index name = do
 -- | Convert a tree-entry to a column value according to its 'TreeEntryKind'.
 -- The file extension is saved for atoms, but otherwise ignored.
 getCol :: Monad m => Text -> Git.TreeEntry r -> ExceptT LoadError m (Field r)
-getCol _ext Git.TreeEntry{Git.treeEntryOid=tid} = return $ Group tid
-getCol  ext Git.BlobEntry{Git.blobEntryOid=bid} = return $ Atom bid $ Text.unpack ext
+getCol  ext Git.BlobEntry{Git.blobEntryOid=bid} = return $ Blob bid $ Text.unpack ext
+getCol _ext Git.TreeEntry{Git.treeEntryOid=tid} = return $ Tree tid
+getCol _ext Git.CommitEntry{} = throwE UnexpectedCommitTreeEntry
 
 data TreeEntryKind
     = BlobEntry
