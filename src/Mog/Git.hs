@@ -104,7 +104,8 @@ type Option = Either LoadError
 
 storeDatatype :: Git.MonadGit r m => Output.Datatype -> m (Git.TreeOid r)
 storeDatatype
-    -- TODO: We can control the merging of keys and values with suffixes:
+    -- NOTE_GITATTRIBUTES: We can control the merging of keys and values with
+    -- suffixes:
     --   .gitattributes := ```
     --   *.pk merge=binary
     --   *.val merge=custom-driver
@@ -120,8 +121,9 @@ storeDatatype
 -- OID for the value. (Assumption: Key data is already in the value.)
 storeRelation :: Git.MonadGit r m => [Output.Tuple] -> m (Git.TreeOid r)
 storeRelation
-    -- TODO: As an alternative to placing these configs at the datatype level,
-    -- we can place them here by outputting the names of tuple columns:
+    -- NOTE_GITATTRIBUTES: As an alternative to placing these configs at the
+    -- datatype level, we can place them here by outputting the names of tuple
+    -- columns:
     --   .gitattributes := ```
     --   */{pkfilecolumns} merge=binary
     --   */{valuecolumns} merge=custom-driver
@@ -133,9 +135,9 @@ storeRelation
 
 storeRow :: Git.MonadGit r m => Output.Row -> m (Git.TreeOid r)
 storeRow
-    -- TODO: What if a row contains a foreign key? Those are subdirectories.
-    -- Foreign keys are always referring to primary keys which don't merge
-    -- (merge=binary).
+    -- NOTE_GITATTRIBUTES: What if a row contains a foreign key? Those are
+    -- subdirectories. Foreign keys are always referring to primary keys which
+    -- don't merge (merge=binary).
     =   Git.createTree
     .   mapM (uncurry Git.putEntry)
     .   map mkName . zip [0::Int ..]
