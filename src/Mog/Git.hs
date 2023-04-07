@@ -55,7 +55,7 @@ storeDatatype
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (sequence . second storeRelation)
-    .   fmap (first $ Text.encodeUtf8 . Text.pack)
+    .   fmap (first Text.encodeUtf8)
     .   snd -- FIXME: currently we just throw out the datatype name
 
 -- | Create a tree OID containing, for each row, a hash of the key mapped to an
@@ -83,12 +83,12 @@ storeRow
     .   mapM (uncurry putCol)
     <=< return
     .   map addExt
-    .   map (first $ Char8.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
+    .   map (first $ Text.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
     .   zip [0::Int ..]
     <=< mapM storeField
   where
     addExt (name, col) = case col of
-        Blob _bid tag -> (name <> "." <> Char8.pack tag, col)
+        Blob _bid tag -> (name <> "." <> tag, col)
         Tree _tid     -> (name <> ".fk",      col)
 
 -- | Create an OID for one column.
@@ -100,11 +100,11 @@ storeField (Output.Group row)   = Tree <$> storeRow row
 
 -- | @putCol (path, column)@ puts the column value into the contextual-tree at the
 -- specified path.
-putCol :: Git.MonadGit r m => Git.TreeFilePath -> Field r -> Git.TreeT r m ()
+putCol :: Git.MonadGit r m => Text -> Field r -> Git.TreeT r m ()
 putCol name col =
     case col of
-        Blob bid _ext -> Git.putBlob name bid
-        Tree tid      -> Git.putTree name tid
+        Blob bid _ext -> Git.putBlob (Text.encodeUtf8 name) bid
+        Tree tid      -> Git.putTree (Text.encodeUtf8 name) tid
 
 
 
@@ -183,7 +183,7 @@ matchIndexLoadExt index name = do
 -- | Convert a tree-entry to a column value according to its 'TreeEntryKind'.
 -- The file extension is saved for atoms, but otherwise ignored.
 getCol :: Monad m => Text -> Git.TreeEntry r -> ExceptT LoadError m (Field r)
-getCol  ext Git.BlobEntry{Git.blobEntryOid=bid} = return $ Blob bid $ Text.unpack ext
+getCol  ext Git.BlobEntry{Git.blobEntryOid=bid} = return $ Blob bid ext
 getCol _ext Git.TreeEntry{Git.treeEntryOid=tid} = return $ Tree tid
 getCol _ext Git.CommitEntry{} = throwE UnexpectedCommitTreeEntry
 

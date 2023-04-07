@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- | Module for the datatype to which a schema instance is encoded or decoded
 -- on the way to git
@@ -14,7 +15,9 @@ import Control.Monad ((<=<))
 import Data.Bifunctor (bimap)
 import Data.ByteString.Lazy (ByteString)
 import Data.Proxy (Proxy(..))
+import Data.Text (Text)
 import GHC.TypeLits (KnownSymbol, symbolVal)
+import qualified Data.Text as Text (pack)
 
 import Codec.Serialise (Serialise, serialise, deserialiseOrFail, DeserialiseFailure)
 import Crypto.Hash (hashlazy, Digest, SHA1)
@@ -34,10 +37,10 @@ import Mog.Instance
 -- * Git datatype
 
 -- | A datatype represented as a group of named characteristic relations.
-type Datatype = (String, [Relation])
+type Datatype = (Text, [Relation])
 
 -- | A characteristic relation represented as a group of db-tuples.
-type Relation = (String, [Tuple])
+type Relation = (Text, [Tuple])
 
 -- | A tuple containing the hash of PK columns and CBOR of all the columns.
 type Tuple = (Digest SHA1, Row)
@@ -52,7 +55,7 @@ data Col
     deriving Show
 
 -- | A string tag indicating the role of a column in the tuple.
-type Tag = String
+type Tag = Text
 
 -- | Primary key.
 pkTag :: Tag
@@ -86,11 +89,11 @@ instance (RowWidth cs) => RowWidth (c % cs) where
     rowWidth _ = 1 + rowWidth @cs Proxy
 
 class Named a where
-    named :: Proxy a -> String
+    named :: Proxy a -> Text
 instance (KnownSymbol name) => Named (Schema name ts) where
-    named _ = symbolVal @name Proxy
+    named _ = Text.pack $ symbolVal @name Proxy
 instance (KnownSymbol name) => Named (Table name pk_v) where
-    named _ = symbolVal @name Proxy
+    named _ = Text.pack $ symbolVal @name Proxy
 
 hashRow :: Row -> Digest SHA1
 hashRow = hashlazy . hashInputRow
@@ -112,10 +115,10 @@ class (Inst i ~ a) => Convert i a b where
     convertFrom :: Proxy i -> b -> Option a
 
 data RestoreError
-    = WrongDatatypeName {got::String, expected::String}
-    | WrongRelationName {got::String, expected::String}
-    | TooFewRelations {expected::String}
-    | TooManyRelations {unexpected::String}
+    = WrongDatatypeName {got::Text, expected::Text}
+    | WrongRelationName {got::Text, expected::Text}
+    | TooFewRelations {expected::Text}
+    | TooManyRelations {unexpected::Text}
     | TooFewColumns
     | TooManyColumns
     | WrongPkHash {gotHash::Digest SHA1, expectedHash::Digest SHA1}
@@ -137,12 +140,12 @@ type Option = Either RestoreError
 --
 instance (Convert ts ts' [Relation], KnownSymbol name)
       => Convert (Schema name ts) ts' Datatype where
-    convertTo _ x =
-        ( symbolVal @name Proxy
+    convertTo ir x =
+        ( named ir
         , convertTo @ts Proxy x )
-    convertFrom _ (n, x)
-        | n == symbolVal @name Proxy = convertFrom @ts Proxy x
-        | otherwise = Left WrongDatatypeName{got=n, expected=symbolVal @name Proxy}
+    convertFrom ir (n, x)
+        | n == named ir = convertFrom @ts Proxy x
+        | otherwise = Left WrongDatatypeName{got=n, expected=named ir}
 
 instance (Convert t t' Relation, Convert ts ts' [Relation], Named t)
       => Convert (t & ts) (t' :& ts') [Relation] where
@@ -164,12 +167,12 @@ instance Convert TablesEnd TTablesEnd [Relation] where
 
 instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
       => Convert (Table name pk_v) pk_v' Relation where
-    convertTo _ x =
-        ( symbolVal @name Proxy
+    convertTo ir x =
+        ( named ir
         , convertTo @pk_v Proxy x )
-    convertFrom _ (n, x)
-        | n == symbolVal @name Proxy = convertFrom @pk_v Proxy x
-        | otherwise = Left WrongRelationName{got=n, expected=symbolVal @name Proxy}
+    convertFrom ir (n, x)
+        | n == named ir = convertFrom @pk_v Proxy x
+        | otherwise = Left WrongRelationName{got=n, expected=named ir}
 
 -- |
 --
