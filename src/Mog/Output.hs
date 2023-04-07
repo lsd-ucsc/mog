@@ -124,7 +124,6 @@ data RestoreError
     | WrongPkHash {gotHash::Digest SHA1, expectedHash::Digest SHA1}
     | GotGroup'ExpectedAtom
     | GotAtom'ExpectedGroup
-    | WrongTag {got::Tag, expected::Tag}
     | DeserialiseFailure DeserialiseFailure
     deriving (Eq, Show)
 
@@ -219,8 +218,8 @@ instance
     convertFrom _
         --  Convert both elements of each pair
         =   mapM (\(pk,v) -> liftA2 (,)
-                (fromRow @pk Proxy pkTag pk)
-                (fromRow @v  Proxy valTag v))
+                (fromRow @pk Proxy pk)
+                (fromRow @v  Proxy v))
         --  Take the pk from the row, verify the hash, return the key & value
         <=< mapM (\(hash,row) ->
                 let (pk,v) = splitAt (rowWidth @pk Proxy) row in
@@ -231,32 +230,33 @@ instance
 
 class ConvertRow a where
     toRow   :: Proxy a -> Tag -> Inst a -> Row
-    fromRow :: Proxy a -> Tag -> Row    -> Option (Inst a)
+    fromRow :: Proxy a        -> Row    -> Option (Inst a)
 
 instance (ConvertCol c, ConvertRow cs) => ConvertRow (c % cs) where
     toRow _ tag (c :% cs) = toCol @c  Proxy tag c
                           : toRow @cs Proxy tag cs
-    fromRow _ _tag []     = Left TooFewColumns
-    fromRow _  tag (x:xs) = liftA2 (:%) (fromCol @c  Proxy tag x)
-                                        (fromRow @cs Proxy tag xs)
+    fromRow _ []     = Left TooFewColumns
+    fromRow _ (x:xs) = liftA2 (:%) (fromCol @c  Proxy x)
+                                   (fromRow @cs Proxy xs)
 
 instance ConvertRow Ø where
-    toRow   _ _r Ø_    = []
-    fromRow _ _r []    = pure Ø_
-    fromRow _ _r (_:_) = Left TooManyColumns
+    toRow   _ _ Ø_    = []
+    fromRow _   []    = pure Ø_
+    fromRow _   (_:_) = Left TooManyColumns
 
 
 class ConvertCol a where
     toCol   :: Proxy a -> Tag -> Inst a -> Col
-    fromCol :: Proxy a -> Tag -> Col    -> Option (Inst a)
+    fromCol :: Proxy a        -> Col    -> Option (Inst a)
 
 instance Serialise a => ConvertCol (Prim a) where
-    toCol   _  tag x                      = Atom (serialise x) tag
-    fromCol _  tag (Atom x e) | tag == e  = bimap DeserialiseFailure id $ deserialiseOrFail x
-                              | otherwise = Left WrongTag{got=e, expected=tag}
-    fromCol _ _tag (Group _)              = Left GotGroup'ExpectedAtom
+    toCol   _  tag x     = Atom (serialise x) tag
+    fromCol _ (Atom x _) = bimap DeserialiseFailure id $ deserialiseOrFail x
+    fromCol _ (Group _)  = Left GotGroup'ExpectedAtom
 
+-- | A foreign key is the primary key of a another relation, so this instance
+-- hardcodes the primary key tag.
 instance ConvertRow fk => ConvertCol (Ref fk index) where
-    toCol   _ _tag            = Group . toRow @fk Proxy pkTag
-    fromCol _ _tag (Atom _ _) = Left GotAtom'ExpectedGroup
-    fromCol _ _tag (Group x)  = fromRow @fk Proxy pkTag x
+    toCol   _ _          = Group . toRow @fk Proxy pkTag
+    fromCol _ (Atom _ _) = Left GotAtom'ExpectedGroup
+    fromCol _ (Group x)  = fromRow @fk Proxy x
