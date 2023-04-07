@@ -54,7 +54,11 @@ data Col
     | Group Row
     deriving Show
 
--- | A string tag indicating the role of a column in the tuple.
+-- | A short string tag indicating the role of a column in a tuple. It is used
+-- as a file extension to control how git handles merge conflicts. Atoms with
+-- 'pkTag' must not have conflicts (this is what the content-addressing of
+-- hashing those values into the file path accomplishes). Atoms with any other
+-- tag will be merged by the Mog merge-driver. Tags are ignored on load.
 type Tag = Text
 
 -- | Primary key.
