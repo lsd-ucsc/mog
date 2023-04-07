@@ -43,10 +43,10 @@ type Relation = (String, [Tuple])
 type Tuple = (Digest SHA1, Row)
 
 -- | CBOR encoded columns representing a db-tuple.
-type Row = [Field]
+type Row = [Col]
 
 -- | A column is either a single atom or group of columns.
-data Field
+data Col
     = Atom  ByteString Tag
     | Group Row
     deriving Show
@@ -98,7 +98,7 @@ hashRow = hashlazy . hashInputRow
 hashInputRow :: Row -> ByteString
 hashInputRow = mconcat . fmap hashChunksCol
 
-hashChunksCol :: Field -> ByteString
+hashChunksCol :: Col -> ByteString
 hashChunksCol (Atom bs _) = bs
 hashChunksCol (Group row) = hashInputRow row
 
@@ -244,8 +244,8 @@ instance ConvertRow Ø where
 
 
 class ConvertCol a where
-    toCol   :: Proxy a -> Tag -> Inst a -> Field
-    fromCol :: Proxy a -> Tag -> Field  -> Option (Inst a)
+    toCol   :: Proxy a -> Tag -> Inst a -> Col
+    fromCol :: Proxy a -> Tag -> Col    -> Option (Inst a)
 
 instance Serialise a => ConvertCol (Prim a) where
     toCol   _  tag x                      = Atom (serialise x) tag

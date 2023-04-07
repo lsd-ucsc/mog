@@ -92,7 +92,7 @@ storeRow
         Group _tid     -> (name <> ".fk",      col)
 
 -- | Create an OID for one column.
-storeField :: Git.MonadGit r m => Output.Field -> m (Field r)
+storeField :: Git.MonadGit r m => Output.Col -> m (Field r)
 storeField (Output.Atom bs tag) = Atom <$> Git.createBlob (Git.BlobStringLazy bs) <*> return tag
 storeField (Output.Group row)   = Group <$> storeRow row
 
@@ -119,9 +119,9 @@ data LoadError
     | UnicodeException UnicodeException
     deriving Show
 
-loadField :: Field r -> m Output.Field
-loadField (Atom  bid role) = undefined -- _2 -- TODO
-loadField (Group tid)      = undefined -- _3 -- TODO
+loadField :: Git.MonadGit r m => Field r -> ExceptT LoadError m Output.Col
+loadField (Atom  bid role) = lift $ Output.Atom <$> Git.catBlobLazy bid <*> return role
+loadField (Group tid)      = Output.Group <$> loadRowT tid
 
 loadRowT :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m Output.Row
 loadRowT tid =
