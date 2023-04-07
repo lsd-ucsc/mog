@@ -178,7 +178,7 @@ instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
 -- >>> type Eg0 = Prim String % Ø ↦ Ø
 -- >>> eg0 = [("hello":%Ø_, Ø_), ("world":%Ø_, Ø_)]
 -- >>> convertTo @Eg0 @_ @[Tuple] Proxy eg0
--- [(34...af,[Atom "ehello" Pk]),(70...e2,[Atom "eworld" Pk])]
+-- [(34...af,[Atom "ehello" "pk"]),(70...e2,[Atom "eworld" "pk"])]
 -- >>> Right eg0 == convertFrom @Eg0 @_ @[Tuple] Proxy (convertTo @Eg0 @_ @[Tuple] Proxy eg0)
 -- True
 --
@@ -187,7 +187,7 @@ instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
 -- >>> type Eg1 = Prim String % Prim String % Ø ↦ Ø
 -- >>> eg1 = [("a":%"bc":%Ø_, Ø_), ("ab":%"c":%Ø_, Ø_)]
 -- >>> convertTo @Eg1 @_ @[Tuple] Proxy eg1
--- [(fb...d0,[Atom "aa" Pk,Atom "bbc" Pk]),(5c...db,[Atom "bab" Pk,Atom "ac" Pk])]
+-- [(fb...d0,[Atom "aa" "pk",Atom "bbc" "pk"]),(5c...db,[Atom "bab" "pk",Atom "ac" "pk"])]
 -- >>> Right eg1 == convertFrom @Eg1 @_ @[Tuple] Proxy (convertTo @Eg1 @_ @[Tuple] Proxy eg1)
 -- True
 --
@@ -196,7 +196,7 @@ instance (Convert pk_v pk_v' [Tuple], KnownSymbol name)
 -- >>> type Eg3 = Ref (Prim String % Ø) 'Here % Ø ↦ Prim Int % Ø
 -- >>> eg3 = [(("three":%Ø_):%Ø_, 3:%Ø_), (("two":%Ø_):%Ø_, 2:%Ø_), (("one":%Ø_):%Ø_, 1:%Ø_)]
 -- >>> convertTo @Eg3 @_ @[Tuple] Proxy eg3
--- [(83...7c,[Group [Atom "ethree" Pk],Atom "\ETX" Val]),(7f...ee,[Group [Atom "ctwo" Pk],Atom "\STX" Val]),(be...20,[Group [Atom "cone" Pk],Atom "\SOH" Val])]
+-- [(83...7c,[Group [Atom "ethree" "pk"],Atom "\ETX" "val"]),(7f...ee,[Group [Atom "ctwo" "pk"],Atom "\STX" "val"]),(be...20,[Group [Atom "cone" "pk"],Atom "\SOH" "val"])]
 -- >>> Right eg3 == convertFrom @Eg3 @_ @[Tuple] Proxy (convertTo @Eg3 @_ @[Tuple] Proxy eg3)
 -- True
 instance
