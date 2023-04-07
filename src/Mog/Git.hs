@@ -10,6 +10,7 @@
 -- The naming convention in here is currently following that of the Output module.
 module Mog.Git where
 
+import Control.Applicative (liftA2)
 import Control.Arrow (first, second)
 import Control.Monad ((<=<))
 import Control.Monad.Trans.Class (lift)
@@ -33,16 +34,73 @@ import qualified Mog.Output as Output
 
 
 
--- * Storage format to git blob/trees
 
-data Field r
-    = Blob (Git.BlobOid r) Output.Tag
-    | Tree (Git.TreeOid r)
+
+
+
+-- * Storage format to git
 
 -- TODO: consider how to store an Output.Database w/o erasing the other trees
 -- (Output.Datatype) in the same database
 --
 -- TODO: storeDatabase :: Git.MonadGit r m => 
+
+
+
+
+-- ** Helpers
+
+-- | Parse utf8 filename. Return index and file extension.
+--
+-- >>> parseName "t0.pk"
+-- Right (0,*.pk)
+-- >>> parseName "t12.val"
+-- Right (12,*.val)
+--
+-- >>> parseName "t0pk" -- no dot
+-- Left (InvalidFilename "t0pk")
+-- >>> parseName "t.0.pk" -- multiple dots
+-- Left (InvalidFilename "t.0.pk")
+-- >>> parseName "t.pk" -- missing index
+-- Left (InvalidFilename "t.pk")
+-- >>> parseName ".pk" -- missing name-part
+-- Left (InvalidFilename ".pk")
+-- >>> parseName "t0." -- empty extension-part
+-- Left (InvalidFilename "t0.")
+-- >>> parseName "t0o.pk" -- non-digit in index
+-- Left (InvalidFilename "t0o.pk")
+-- >>> parseName "t0.p$k" -- non-alnum in extension
+-- Left (InvalidFilename "t0.p$k")
+parseName :: Git.TreeFilePath -> Option (Int, FileExt)
+parseName name = do
+    t <- bimap UnicodeException id $ Text.decodeUtf8' name
+    (digits, ext) <- matchName t
+    ix <- maybe (error "bug in regex") pure . readMaybe $ Text.unpack digits
+    return (ix, FileExt ext)
+  where
+    namePattern = "^t([[:digit:]]+)\\.([[:alnum:]]+)$" :: Text
+    matchNamePattern = (=~~ namePattern) :: Text -> Maybe (Text, Text, Text, [Text])
+    matchName txt = case matchNamePattern txt of
+        Just ("", t, "", [digits, ext]) | t == txt -> pure (digits, ext)
+        _ -> Left $ InvalidFilename txt
+-- TODO: differentiate error cases
+
+
+
+
+-- ** Functions to implement conversion
+
+newtype FileExt = FileExt Text
+instance Show FileExt where show (FileExt ext) = '*':'.':Text.unpack ext
+
+data LoadError
+    = UnexpectedCommitTreeEntry
+    | WrongIndex{gotIndex::Int, expectedIndex::Int}
+    | InvalidFilename Text
+    | UnicodeException UnicodeException
+    deriving Show
+
+type Option = Either LoadError
 
 storeDatatype :: Git.MonadGit r m => Output.Datatype -> m (Git.TreeOid r)
 storeDatatype
@@ -73,127 +131,47 @@ storeRelation
     <=< mapM (sequence . second storeRow)
     .   fmap (first $ Char8.pack . show) -- XXX: packing a hex-digest of a hash, so Char8.pack should be safe
 
--- | Create a tree OID containing, for each column, a tuple-index mapped to an OID.
 storeRow :: Git.MonadGit r m => Output.Row -> m (Git.TreeOid r)
 storeRow
     -- TODO: What if a row contains a foreign key? Those are subdirectories.
     -- Foreign keys are always referring to primary keys which don't merge
     -- (merge=binary).
     =   Git.createTree
-    .   mapM (uncurry putCol)
-    <=< return
-    .   map addExt
-    .   map (first $ Text.pack . ('t':) . show) -- XXX: packing a single 't' followed by digits, so Char8.pack should be safe
-    .   zip [0::Int ..]
-    <=< mapM storeField
+    .   mapM (uncurry Git.putEntry)
+    .   map mkName . zip [0::Int ..]
+    <=< mapM storeCol
   where
-    addExt (name, col) = case col of
-        Blob _bid tag -> (name <> "." <> tag, col)
-        Tree _tid     -> (name <> ".fk",      col)
+    mkName (index, (FileExt ext, entry)) =
+        let name = (Text.pack $ 't' : show index) <> "." <> ext in
+        (Text.encodeUtf8 name, entry)
 
--- | Create an OID for one column.
-storeField :: Git.MonadGit r m => Output.Col -> m (Field r)
-storeField (Output.Atom bs tag) = Blob <$> Git.createBlob (Git.BlobStringLazy bs) <*> return tag
-storeField (Output.Group row)   = Tree <$> storeRow row
-
--- ** Store-pass utilities
-
--- | @putCol (path, column)@ puts the column value into the contextual-tree at the
--- specified path.
-putCol :: Git.MonadGit r m => Text -> Field r -> Git.TreeT r m ()
-putCol name col =
-    case col of
-        Blob bid _ext -> Git.putBlob (Text.encodeUtf8 name) bid
-        Tree tid      -> Git.putTree (Text.encodeUtf8 name) tid
-
-
-
-
--- * Git blob/trees to storage format
-
-type Option = Either LoadError
-
-data LoadError
-    = UnexpectedCommitTreeEntry
-    | WrongIndex{gotIndex::Int, expectedIndex::Int}
-    | InvalidFilename Text
-    | UnicodeException UnicodeException
-    deriving Show
-
-loadField :: Git.MonadGit r m => Field r -> ExceptT LoadError m Output.Col
-loadField (Blob bid tag) = lift $ Output.Atom <$> Git.catBlobLazy bid <*> return tag
-loadField (Tree tid)     = Output.Group <$> loadRowT tid
-
-loadRowT :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m Output.Row
-loadRowT tid =
-        mapM loadField
-    <=< mapM (uncurry getCol)
-    <=< mapM (\(ix, (n, e)) -> liftE $ (,) <$> matchIndexLoadExt ix n <*> return e)
-    .   zip [0::Int ..]
-    <=< lift
-    $   Git.listTreeEntries
-    <=< Git.lookupTree
-    $   tid
+loadRow :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m Output.Row
+loadRow
+    =   mapM (uncurry loadCol)
+    <=< mapM (uncurry unName) . zip [0::Int ..]
+    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.lookupTree)
   where
     liftE = ExceptT . pure
+    unName index (path, entry) = do
+        (i, ext) <- liftE $ parseName path
+        if i == index
+        then return (ext, entry)
+        else throwE WrongIndex{gotIndex=i, expectedIndex=index}
 
--- | Parse utf8 filename, match against expected naming format, match index
--- number, and return file extension.
---
--- >>> matchIndexLoadExt 0 "t0.pk"
--- Right "pk"
--- >>> matchIndexLoadExt 12 "t12.val"
--- Right "val"
---
--- >>> matchIndexLoadExt 0 "t.0.pk" -- multiple dots
--- Left (InvalidFilename "t.0.pk")
--- >>> matchIndexLoadExt 0 "t.pk" -- missing index
--- Left (InvalidFilename "t.pk")
--- >>> matchIndexLoadExt 0 ".pk" -- missing filename
--- Left (InvalidFilename ".pk")
--- >>> matchIndexLoadExt 0 "t0" -- missing extension
--- Left (InvalidFilename "t0")
--- >>> matchIndexLoadExt 0 "t0." -- empty extension
--- Left (InvalidFilename "t0.")
--- >>> matchIndexLoadExt 0 "t0o.pk" -- non-digit in index
--- Left (InvalidFilename "t0o.pk")
--- >>> matchIndexLoadExt 0 "t0.p$k" -- non-alnum in extension
--- Left (InvalidFilename "t0.p$k")
---
--- >>> matchIndexLoadExt 1 "t0.fk" -- wrong index
--- Left (WrongIndex {gotIndex = 0, expectedIndex = 1})
-matchIndexLoadExt :: Int -> Git.TreeFilePath -> Option Text
-matchIndexLoadExt index name = do
-    txt <- bimap UnicodeException id $ Text.decodeUtf8' name
-    (digits, ext) <- matchName txt
-    i <- maybe (error "unreachable") pure . readMaybe $ Text.unpack digits
-    if i == index
-    then return ext
-    else Left WrongIndex{gotIndex=i, expectedIndex=index}
+-- | Write-out serialized column data to create an OID and choose a file name
+-- extension. Atom's use their tag, groups use a made-up extension.
+storeCol :: Git.MonadGit r m => Output.Col -> m (FileExt, Git.TreeEntry r)
+storeCol col = liftA2 (,) (pure $ ext col) (store col)
   where
-    namePattern = "^t([[:digit:]]+)\\.([[:alnum:]]+)$" :: Text
-    matchNamePattern = (=~~ namePattern) :: Text -> Maybe (Text, Text, Text, [Text])
-    matchName txt = case matchNamePattern txt of
-        Just ("", t, "", [digits, ext]) | t == txt -> pure (digits, ext)
-        _ -> Left $ InvalidFilename txt
--- TODO: differentiate error cases
+    ext (Output.Group _)    = FileExt "fk"
+    ext (Output.Atom _ tag) = FileExt tag
+    store (Output.Group row) = Git.TreeEntry <$> storeRow row
+    store (Output.Atom bs _) = Git.BlobEntry <$> Git.createBlob (Git.BlobStringLazy bs) <*> return Git.PlainBlob
 
--- ** Load-pass utilities
-
--- | Convert a tree-entry to a column value according to its 'TreeEntryKind'.
--- The file extension is saved for atoms, but otherwise ignored.
-getCol :: Monad m => Text -> Git.TreeEntry r -> ExceptT LoadError m (Field r)
-getCol  ext Git.BlobEntry{Git.blobEntryOid=bid} = return $ Blob bid ext
-getCol _ext Git.TreeEntry{Git.treeEntryOid=tid} = return $ Tree tid
-getCol _ext Git.CommitEntry{} = throwE UnexpectedCommitTreeEntry
-
-data TreeEntryKind
-    = BlobEntry
-    | TreeEntry
-    | CommitEntry
-    deriving Show
-
-treeEntryKind :: Git.TreeEntry r -> TreeEntryKind
-treeEntryKind Git.BlobEntry{} = BlobEntry
-treeEntryKind Git.TreeEntry{} = TreeEntry
-treeEntryKind Git.CommitEntry{} = CommitEntry
+-- | Read-in serialized column data from its OID and store the given extension
+-- if the column is an Atom.
+loadCol :: Git.MonadGit r m => FileExt -> Git.TreeEntry r -> ExceptT LoadError m Output.Col
+loadCol _             (Git.TreeEntry tid)   = Output.Group <$> loadRow tid
+loadCol (FileExt ext) (Git.BlobEntry bid _) = Output.Atom <$> lift (Git.catBlobLazy bid) <*> return ext
+loadCol _              Git.CommitEntry{}    = throwE UnexpectedCommitTreeEntry
