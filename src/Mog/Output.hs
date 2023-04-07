@@ -34,7 +34,7 @@ import Mog.Instance
 
 
 
--- * Git datatype
+-- * Storage format
 
 -- | A datatype represented as a group of named characteristic relations.
 type Datatype = (Text, [Relation])
@@ -72,7 +72,7 @@ valTag = "val"
 
 
 
--- * Output an instance
+-- * Instance of IR to storage format
 
 toOutput :: (Convert a a' Datatype) => Proxy a -> a' -> Datatype
 toOutput = convertTo
@@ -112,7 +112,7 @@ hashChunksCol (Group row) = hashInputRow row
 
 
 
--- ** Storage class
+-- ** Classes to implement conversion
 
 class (Inst i ~ a) => Convert i a b where
     convertTo   :: Proxy i -> a -> b
@@ -231,36 +231,38 @@ instance
                 then pure (pk,v)
                 else Left WrongPkHash{gotHash=hash, expectedHash=hashRow pk})
 
+-- *** Row conversion
 
 class ConvertRow a where
     toRow   :: Proxy a -> Tag -> Inst a -> Row
     fromRow :: Proxy a        -> Row    -> Option (Inst a)
 
 instance (ConvertCol c, ConvertRow cs) => ConvertRow (c % cs) where
-    toRow _ tag (c :% cs) = toCol @c  Proxy tag c
+    toRow   _ tag (c:%cs) = toCol @c  Proxy tag c
                           : toRow @cs Proxy tag cs
-    fromRow _ []     = Left TooFewColumns
-    fromRow _ (x:xs) = liftA2 (:%) (fromCol @c  Proxy x)
-                                   (fromRow @cs Proxy xs)
+    fromRow _     []      = Left TooFewColumns
+    fromRow _     (x:xs)  = liftA2 (:%) (fromCol @c  Proxy x)
+                                        (fromRow @cs Proxy xs)
 
 instance ConvertRow Ø where
     toRow   _ _ Ø_    = []
     fromRow _   []    = pure Ø_
     fromRow _   (_:_) = Left TooManyColumns
 
+-- *** Col conversion
 
 class ConvertCol a where
     toCol   :: Proxy a -> Tag -> Inst a -> Col
     fromCol :: Proxy a        -> Col    -> Option (Inst a)
 
 instance Serialise a => ConvertCol (Prim a) where
-    toCol   _  tag x     = Atom (serialise x) tag
-    fromCol _ (Atom x _) = bimap DeserialiseFailure id $ deserialiseOrFail x
-    fromCol _ (Group _)  = Left GotGroup'ExpectedAtom
+    toCol   _  tag x          = Atom (serialise x) tag
+    fromCol _      (Atom x _) = bimap DeserialiseFailure id $ deserialiseOrFail x
+    fromCol _      (Group _)  = Left GotGroup'ExpectedAtom
 
 -- | A foreign key is the primary key of a another relation, so this instance
 -- hardcodes the primary key tag.
 instance ConvertRow fk => ConvertCol (Ref fk index) where
-    toCol   _ _          = Group . toRow @fk Proxy pkTag
-    fromCol _ (Atom _ _) = Left GotAtom'ExpectedGroup
-    fromCol _ (Group x)  = fromRow @fk Proxy x
+    toCol   _ _ x          = Group $ toRow @fk Proxy pkTag x
+    fromCol _   (Atom _ _) = Left GotAtom'ExpectedGroup
+    fromCol _   (Group x)  = fromRow @fk Proxy x
