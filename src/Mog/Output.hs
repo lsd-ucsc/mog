@@ -45,15 +45,22 @@ type Tuple = (Digest SHA1, Row)
 -- | CBOR encoded columns representing a db-tuple.
 type Row = [Field]
 
--- | Whether a leave element is in the PK or not. Some day, might be a string.
-data Role = Pk | Val
-    deriving (Eq, Show)
-
 -- | A column is either a single atom or group of columns.
 data Field
-    = Atom  ByteString Role
+    = Atom  ByteString Tag
     | Group Row
     deriving Show
+
+-- | A string tag indicating the role of a column in the tuple.
+type Tag = String
+
+-- | Primary key.
+pkTag :: Tag
+pkTag = "pk"
+
+-- | Value (not a primary key).
+valTag :: Tag
+valTag = "val"
 
 
 
@@ -114,7 +121,7 @@ data RestoreError
     | WrongPkHash {gotHash::Digest SHA1, expectedHash::Digest SHA1}
     | GotGroup'ExpectedAtom
     | GotAtom'ExpectedGroup
-    | WrongRole {gotRole::Role, expectedRole::Role}
+    | WrongTag {got::Tag, expected::Tag}
     | DeserialiseFailure DeserialiseFailure
     deriving (Eq, Show)
 
@@ -204,13 +211,13 @@ instance
     convertTo _
         = map (\(pk,v) -> (hashRow pk, pk <> v))
         . map (bimap
-            (toRow @pk Proxy Pk)
-            (toRow @v  Proxy Val))
+            (toRow @pk Proxy pkTag)
+            (toRow @v  Proxy valTag))
     convertFrom _
         --  Convert both elements of each pair
         =   mapM (\(pk,v) -> liftA2 (,)
-                (fromRow @pk Proxy Pk pk)
-                (fromRow @v  Proxy Val v))
+                (fromRow @pk Proxy pkTag pk)
+                (fromRow @v  Proxy valTag v))
         --  Take the pk from the row, verify the hash, return the key & value
         <=< mapM (\(hash,row) ->
                 let (pk,v) = splitAt (rowWidth @pk Proxy) row in
@@ -220,15 +227,15 @@ instance
 
 
 class ConvertRow a where
-    toRow   :: Proxy a -> Role -> Inst a -> Row
-    fromRow :: Proxy a -> Role -> Row    -> Option (Inst a)
+    toRow   :: Proxy a -> Tag -> Inst a -> Row
+    fromRow :: Proxy a -> Tag -> Row    -> Option (Inst a)
 
 instance (ConvertCol c, ConvertRow cs) => ConvertRow (c % cs) where
-    toRow _ role (c :% cs) = toCol @c  Proxy role c
-                           : toRow @cs Proxy role cs
-    fromRow _ _role []     = Left TooFewColumns
-    fromRow _  role (x:xs) = liftA2 (:%) (fromCol @c  Proxy role x)
-                                         (fromRow @cs Proxy role xs)
+    toRow _ tag (c :% cs) = toCol @c  Proxy tag c
+                          : toRow @cs Proxy tag cs
+    fromRow _ _tag []     = Left TooFewColumns
+    fromRow _  tag (x:xs) = liftA2 (:%) (fromCol @c  Proxy tag x)
+                                        (fromRow @cs Proxy tag xs)
 
 instance ConvertRow Ø where
     toRow   _ _r Ø_    = []
@@ -237,16 +244,16 @@ instance ConvertRow Ø where
 
 
 class ConvertCol a where
-    toCol   :: Proxy a -> Role -> Inst a -> Field
-    fromCol :: Proxy a -> Role -> Field  -> Option (Inst a)
+    toCol   :: Proxy a -> Tag -> Inst a -> Field
+    fromCol :: Proxy a -> Tag -> Field  -> Option (Inst a)
 
 instance Serialise a => ConvertCol (Prim a) where
-    toCol   _  role x                      = Atom (serialise x) role
-    fromCol _  role (Atom x r) | role == r = bimap DeserialiseFailure id $ deserialiseOrFail x
-                               | otherwise = Left WrongRole{gotRole=r, expectedRole=role}
-    fromCol _ _role (Group _)              = Left GotGroup'ExpectedAtom
+    toCol   _  tag x                      = Atom (serialise x) tag
+    fromCol _  tag (Atom x e) | tag == e  = bimap DeserialiseFailure id $ deserialiseOrFail x
+                              | otherwise = Left WrongTag{got=e, expected=tag}
+    fromCol _ _tag (Group _)              = Left GotGroup'ExpectedAtom
 
 instance ConvertRow fk => ConvertCol (Ref fk index) where
-    toCol   _ _r            = Group . toRow @fk Proxy Pk
-    fromCol _ _r (Atom _ _) = Left GotAtom'ExpectedGroup
-    fromCol _ _r (Group x)  = fromRow @fk Proxy Pk x
+    toCol   _ _tag            = Group . toRow @fk Proxy pkTag
+    fromCol _ _tag (Atom _ _) = Left GotAtom'ExpectedGroup
+    fromCol _ _tag (Group x)  = fromRow @fk Proxy pkTag x
