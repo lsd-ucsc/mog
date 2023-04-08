@@ -42,27 +42,27 @@ parallel f g = times . bimap f g
 
 -- | Parse utf8 filename. Return index and file extension.
 --
--- >>> parseName "t0.pk"
+-- >>> parseFieldName "t0.pk"
 -- Right (0,*.pk)
--- >>> parseName "t12.val"
+-- >>> parseFieldName "t12.val"
 -- Right (12,*.val)
 --
--- >>> parseName "t0pk" -- no dot
+-- >>> parseFieldName "t0pk" -- no dot
 -- Left (InvalidFilename "t0pk")
--- >>> parseName "t.0.pk" -- multiple dots
+-- >>> parseFieldName "t.0.pk" -- multiple dots
 -- Left (InvalidFilename "t.0.pk")
--- >>> parseName "t.pk" -- missing index
+-- >>> parseFieldName "t.pk" -- missing index
 -- Left (InvalidFilename "t.pk")
--- >>> parseName ".pk" -- missing name-part
+-- >>> parseFieldName ".pk" -- missing name-part
 -- Left (InvalidFilename ".pk")
--- >>> parseName "t0." -- empty extension-part
+-- >>> parseFieldName "t0." -- empty extension-part
 -- Left (InvalidFilename "t0.")
--- >>> parseName "t0o.pk" -- non-digit in index
+-- >>> parseFieldName "t0o.pk" -- non-digit in index
 -- Left (InvalidFilename "t0o.pk")
--- >>> parseName "t0.p$k" -- non-alnum in extension
+-- >>> parseFieldName "t0.p$k" -- non-alnum in extension
 -- Left (InvalidFilename "t0.p$k")
-parseName :: Git.TreeFilePath -> Either LoadError (Int, FileExt)
-parseName name = do
+parseFieldName :: Git.TreeFilePath -> Either LoadError (Int, FileExt)
+parseFieldName name = do
     t <- bimap UnicodeException id $ Text.decodeUtf8' name
     (digits, ext) <- matchName t
     ix <- maybe (error "bug in regex") pure . readMaybe $ Text.unpack digits
@@ -176,7 +176,7 @@ loadRow
   where
     liftE = ExceptT . pure
     unName index (path, entry) = do
-        (i, ext) <- liftE $ parseName path
+        (i, ext) <- liftE $ parseFieldName path
         if i == index
         then return (ext, entry)
         else throwE WrongIndex{gotIndex=i, expectedIndex=index}
