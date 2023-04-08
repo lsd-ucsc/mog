@@ -61,7 +61,7 @@ parallel f g = times . bimap f g
 -- Left (InvalidFilename "t0o.pk")
 -- >>> parseName "t0.p$k" -- non-alnum in extension
 -- Left (InvalidFilename "t0.p$k")
-parseName :: Git.TreeFilePath -> Option (Int, FileExt)
+parseName :: Git.TreeFilePath -> Either LoadError (Int, FileExt)
 parseName name = do
     t <- bimap UnicodeException id $ Text.decodeUtf8' name
     (digits, ext) <- matchName t
@@ -90,8 +90,6 @@ data LoadError
     | InvalidFilename Text
     | UnicodeException UnicodeException
     deriving Show
-
-type Option = Either LoadError
 
 -- FIXME: we want to be able to store and load datatypes independenty of each
 -- other, but this is a start
