@@ -42,19 +42,16 @@ type Datatype = (Text, [Relation])
 -- | A characteristic relation represented as a group of db-tuples.
 type Relation = (Text, [Tuple])
 
--- | A tuple containing the hash of PK columns and CBOR of all the columns.
-type Tuple = (Digest SHA1, Row)
+-- | A tuple containing the hash of PK fields and CBOR of all the fields.
+type Tuple = (Digest SHA1, [Field])
 
--- | CBOR encoded columns representing a db-tuple.
-type Row = [Col]
-
--- | A column is either a single atom or group of columns.
-data Col
+-- | A field is either a single atom or group of fields.
+data Field
     = Atom  ByteString Tag
-    | Group Row
+    | Group [Field]
     deriving Show
 
--- | A short string tag indicating the role of a column in a tuple. It is used
+-- | A short string tag indicating the role of a field in a tuple. It is used
 -- as a file extension to control how git handles merge conflicts. Atoms with
 -- 'pkTag' must not have conflicts (this is what the content-addressing of
 -- hashing those values into the file path accomplishes). Atoms with any other
@@ -99,15 +96,15 @@ instance (KnownSymbol name) => Named (Schema name ts) where
 instance (KnownSymbol name) => Named (Table name pk_v) where
     named _ = Text.pack $ symbolVal @name Proxy
 
-hashRow :: Row -> Digest SHA1
+hashRow :: [Field] -> Digest SHA1
 hashRow = hashlazy . hashInputRow
 
-hashInputRow :: Row -> ByteString
-hashInputRow = mconcat . fmap hashChunksCol
+hashInputRow :: [Field] -> ByteString
+hashInputRow = mconcat . fmap hashChunksField
 
-hashChunksCol :: Col -> ByteString
-hashChunksCol (Atom bs _) = bs
-hashChunksCol (Group row) = hashInputRow row
+hashChunksField :: Field -> ByteString
+hashChunksField (Atom bs _) = bs
+hashChunksField (Group row) = hashInputRow row
 
 
 
@@ -123,8 +120,8 @@ data RestoreError
     | WrongRelationName {got::Text, expected::Text}
     | TooFewRelations {expected::Text}
     | TooManyRelations {unexpected::Text}
-    | TooFewColumns
-    | TooManyColumns
+    | TooFewFields
+    | TooManyFields
     | WrongPkHash {gotHash::Digest SHA1, expectedHash::Digest SHA1}
     | GotGroup'ExpectedAtom
     | GotAtom'ExpectedGroup
@@ -234,35 +231,35 @@ instance
 -- *** Row conversion
 
 class ConvertRow a where
-    toRow   :: Proxy a -> Tag -> Inst a -> Row
-    fromRow :: Proxy a        -> Row    -> Option (Inst a)
+    toRow   :: Proxy a -> Tag -> Inst a  -> [Field]
+    fromRow :: Proxy a        -> [Field] -> Option (Inst a)
 
-instance (ConvertCol c, ConvertRow cs) => ConvertRow (c % cs) where
-    toRow   _ tag (c:%cs) = toCol @c  Proxy tag c
-                          : toRow @cs Proxy tag cs
-    fromRow _     []      = Left TooFewColumns
-    fromRow _     (x:xs)  = liftA2 (:%) (fromCol @c  Proxy x)
-                                        (fromRow @cs Proxy xs)
+instance (ConvertField c, ConvertRow cs) => ConvertRow (c % cs) where
+    toRow   _ tag (c:%cs) = toField @c  Proxy tag c
+                          : toRow   @cs Proxy tag cs
+    fromRow _     []      = Left TooFewFields
+    fromRow _     (x:xs)  = liftA2 (:%) (fromField @c  Proxy x)
+                                        (fromRow   @cs Proxy xs)
 
 instance ConvertRow Ø where
     toRow   _ _ Ø_    = []
     fromRow _   []    = pure Ø_
-    fromRow _   (_:_) = Left TooManyColumns
+    fromRow _   (_:_) = Left TooManyFields
 
--- *** Col conversion
+-- *** Field conversion
 
-class ConvertCol a where
-    toCol   :: Proxy a -> Tag -> Inst a -> Col
-    fromCol :: Proxy a        -> Col    -> Option (Inst a)
+class ConvertField a where
+    toField   :: Proxy a -> Tag -> Inst a -> Field
+    fromField :: Proxy a        -> Field  -> Option (Inst a)
 
-instance Serialise a => ConvertCol (Prim a) where
-    toCol   _  tag x          = Atom (serialise x) tag
-    fromCol _      (Atom x _) = bimap DeserialiseFailure id $ deserialiseOrFail x
-    fromCol _      (Group _)  = Left GotGroup'ExpectedAtom
+instance Serialise a => ConvertField (Prim a) where
+    toField   _  tag x          = Atom (serialise x) tag
+    fromField _      (Atom x _) = bimap DeserialiseFailure id $ deserialiseOrFail x
+    fromField _      (Group _)  = Left GotGroup'ExpectedAtom
 
 -- | A foreign key is the primary key of a another relation, so this instance
 -- hardcodes the primary key tag.
-instance ConvertRow fk => ConvertCol (Ref fk index) where
-    toCol   _ _ x          = Group $ toRow @fk Proxy pkTag x
-    fromCol _   (Atom _ _) = Left GotAtom'ExpectedGroup
-    fromCol _   (Group x)  = fromRow @fk Proxy x
+instance ConvertRow fk => ConvertField (Ref fk index) where
+    toField   _ _ x          = Group $ toRow @fk Proxy pkTag x
+    fromField _   (Atom _ _) = Left GotAtom'ExpectedGroup
+    fromField _   (Group x)  = fromRow @fk Proxy x

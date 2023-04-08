@@ -131,8 +131,6 @@ loadRelations
     loadName name = either (throwE . UnicodeException) pure $ Text.decodeUtf8' name
 
 
--- | Create a tree OID containing, for each row, a hash of the key mapped to an
--- OID for the value. (Assumption: Key data is already in the value.)
 storeTuples :: Git.MonadGit r m => [Output.Tuple] -> m (Git.TreeOid r)
 storeTuples
     -- NOTE_GITATTRIBUTES: As an alternative to placing these configs at the
@@ -156,8 +154,8 @@ loadTuples
     <=< (lift . Git.lookupTree)
   where
     loadEntryRow (Git.TreeEntry tid) = loadRow tid
-    loadEntryRow  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of columns in a tuple; got a CommitEntry"}
-    loadEntryRow  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of columns in a tuple; got a BlobEntry"}
+    loadEntryRow  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of fields in a tuple; got a CommitEntry"}
+    loadEntryRow  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of fields in a tuple; got a BlobEntry"}
     loadHash name = do
         -- NOTE: Char8.unpack is unsafe for external data which may not be
         -- ascii, so we use Text.decodeUtf8' and surface a possible error.
@@ -165,7 +163,7 @@ loadTuples
         maybe (throwE $ InvalidHash t) pure . readMaybe $ Text.unpack t
 
 
-storeRow :: Git.MonadGit r m => Output.Row -> m (Git.TreeOid r)
+storeRow :: Git.MonadGit r m => [Output.Field] -> m (Git.TreeOid r)
 storeRow
     -- NOTE_GITATTRIBUTES: What if a row contains a foreign key? Those are
     -- subdirectories. Foreign keys are always referring to primary keys which
@@ -173,15 +171,15 @@ storeRow
     =   Git.createTree
     .   mapM (uncurry Git.putEntry)
     .   map mkName . zip [0::Int ..]
-    <=< mapM storeCol
+    <=< mapM storeField
   where
     mkName (index, (FileExt ext, entry)) =
         let name = (Text.pack $ 't' : show index) <> "." <> ext in
         (Text.encodeUtf8 name, entry)
 
-loadRow :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m Output.Row
+loadRow :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Field]
 loadRow
-    =   mapM (uncurry loadCol)
+    =   mapM (uncurry loadField)
     <=< mapM (uncurry unName) . zip [0::Int ..]
     <=< (lift . Git.listTreeEntries)
     <=< (lift . Git.lookupTree)
@@ -194,19 +192,19 @@ loadRow
         else throwE WrongIndex{gotIndex=i, expectedIndex=index}
 
 
--- | Write-out serialized column data to create an OID and choose a file name
--- extension. Atom's use their tag, groups use a made-up extension.
-storeCol :: Git.MonadGit r m => Output.Col -> m (FileExt, Git.TreeEntry r)
-storeCol col = parallel (pure . ext) store (col, col)
+-- | Write-out serialized field data to create an OID and choose a filename
+-- extension. Atoms use their tag, and groups use a made-up extension.
+storeField :: Git.MonadGit r m => Output.Field -> m (FileExt, Git.TreeEntry r)
+storeField field = parallel (pure . ext) store (field, field)
   where
     ext (Output.Group _)    = FileExt "fk"
     ext (Output.Atom _ tag) = FileExt tag
     store (Output.Group row) = Git.TreeEntry <$> storeRow row
     store (Output.Atom bs _) = Git.BlobEntry <$> Git.createBlob (Git.BlobStringLazy bs) <*> return Git.PlainBlob
 
--- | Read-in serialized column data from its OID and store the given extension
--- if the column is an Atom.
-loadCol :: Git.MonadGit r m => FileExt -> Git.TreeEntry r -> ExceptT LoadError m Output.Col
-loadCol _             (Git.TreeEntry tid)   = Output.Group <$> loadRow tid
-loadCol (FileExt ext) (Git.BlobEntry bid _) = Output.Atom <$> lift (Git.catBlobLazy bid) <*> return ext
-loadCol _              Git.CommitEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry (Group) or BlobEntry (Atom) for a column in a row; got a CommitEntry"}
+-- | Read-in serialized field data from an OID and store the given extension if
+-- the field is an Atom.
+loadField :: Git.MonadGit r m => FileExt -> Git.TreeEntry r -> ExceptT LoadError m Output.Field
+loadField _             (Git.TreeEntry tid)   = Output.Group <$> loadRow tid
+loadField (FileExt ext) (Git.BlobEntry bid _) = Output.Atom <$> lift (Git.catBlobLazy bid) <*> return ext
+loadField _              Git.CommitEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry (Group) or BlobEntry (Atom) for a Fieldumn in a row; got a CommitEntry"}
