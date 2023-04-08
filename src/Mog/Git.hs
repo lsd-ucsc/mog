@@ -13,9 +13,10 @@ import Data.Bifunctor (bimap)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Text.Read (readMaybe)
-import qualified Data.Text as Text (pack, unpack)
+import qualified Data.Text as Text (pack, unpack, stripSuffix)
 import qualified Data.Text.Encoding as Text (encodeUtf8, decodeUtf8')
 
+import Crypto.Hash (Digest, SHA1)
 import Text.Regex.TDFA ((=~~))
 import qualified Git
 
@@ -61,6 +62,9 @@ parallel f g = times . bimap f g
 -- Left (InvalidFilename "t0o.pk")
 -- >>> parseFieldName "t0.p$k" -- non-alnum in extension
 -- Left (InvalidFilename "t0.p$k")
+--
+-- >>> parseFieldName "0c11d463c749db5838e2c0e489bf869d531e5403.tup"
+-- Left (InvalidFilename "0c11d463c749db5838e2c0e489bf869d531e5403.tup")
 parseFieldName :: Git.TreeFilePath -> Either LoadError (Int, FileExt)
 parseFieldName name = do
     t <- bimap UnicodeException id $ Text.decodeUtf8' name
@@ -74,6 +78,22 @@ parseFieldName name = do
         Just ("", t, "", [digits, ext]) | t == txt -> pure (digits, ext)
         _ -> Left $ InvalidFilename txt
 -- TODO: differentiate error cases
+
+-- | Parse utf8 filename. Strip extension and return hash.
+--
+-- >>> parseTupleName "0c11d463c749db5838e2c0e489bf869d531e5403.tup"
+-- Right 0c11d463c749db5838e2c0e489bf869d531e5403
+--
+-- >>> parseTupleName "$$000000000000000000000000000000000000%%.tup"
+-- Left (InvalidHash "$$000000000000000000000000000000000000%%")
+--
+-- >>> parseTupleName "t0.pk"
+-- Left (InvalidFilename "t0.pk")
+parseTupleName :: Git.TreeFilePath -> Either LoadError (Digest SHA1)
+parseTupleName name = do
+    t <- bimap UnicodeException id $ Text.decodeUtf8' name
+    h <- maybe (Left $ InvalidFilename t) pure $ Text.stripSuffix ".tup" t
+    maybe (Left $ InvalidHash h) pure . readMaybe $ Text.unpack h
 
 
 
@@ -138,22 +158,17 @@ storeTuples
     <=< mapM (parallel storeHash storeRow)
   where
     -- NOTE: Char8.pack might be safe, but it's better to use utf8 explicitly.
-    storeHash = pure . Text.encodeUtf8 . Text.pack . show
+    storeHash = pure . Text.encodeUtf8 . (<> ".tup") . Text.pack . show
 
 loadTuples :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Tuple]
 loadTuples
-    =   mapM (parallel loadHash loadEntryRow)
+    =   mapM (parallel (ExceptT . pure . parseTupleName) loadEntryRow)
     <=< (lift . Git.listTreeEntries)
     <=< (lift . Git.lookupTree)
   where
     loadEntryRow (Git.TreeEntry tid) = loadRow tid
     loadEntryRow  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of fields in a tuple; got a CommitEntry"}
     loadEntryRow  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of fields in a tuple; got a BlobEntry"}
-    loadHash name = do
-        -- NOTE: Char8.unpack is unsafe for external data which may not be
-        -- ascii, so we use Text.decodeUtf8' and surface a possible error.
-        t <- either (throwE . UnicodeException) pure $ Text.decodeUtf8' name
-        maybe (throwE $ InvalidHash t) pure . readMaybe $ Text.unpack t
 
 
 storeRow :: Git.MonadGit r m => [Output.Field] -> m (Git.TreeOid r)
