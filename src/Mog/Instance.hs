@@ -16,7 +16,6 @@ module Mog.Instance
     ) where
 
 import Data.Kind (Type)
-import Data.Map (Map)
 import Data.Type.Equality ((:~:)(..))
 import Data.Proxy (Proxy(..))
 
