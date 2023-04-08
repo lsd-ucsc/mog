@@ -1,9 +1,7 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Module for interacting storing/loading the storage format to git. The
--- functions in this module are polymorphic over the "gitlib" backend.
+-- | Module for interacting with git by reading or writing the storage format.
+-- Functions in this module are polymorphic over the "gitlib" backend.
 module Mog.Git where
 
 import Control.Applicative (liftA2)
@@ -15,20 +13,16 @@ import Data.Bifunctor (bimap)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Text.Read (readMaybe)
-import Text.Regex.TDFA ((=~~))
 import qualified Data.Text as Text (pack, unpack)
 import qualified Data.Text.Encoding as Text (encodeUtf8, decodeUtf8')
 
+import Text.Regex.TDFA ((=~~))
 import qualified Git
 
 import qualified Mog.Output as Output
 
 -- $setup
 -- >>> :set -XOverloadedStrings
-
-
-
-
 
 
 

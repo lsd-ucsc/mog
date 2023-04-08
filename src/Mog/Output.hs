@@ -1,13 +1,12 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables, TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
--- | Module for the datatype to which a schema instance is encoded or decoded
--- on the way to git
+-- | Module for converting a schema instance to or from the storage format used
+-- with git.
 module Mog.Output where
 
 import Control.Applicative (liftA2)
@@ -36,16 +35,18 @@ import Mog.Instance
 
 -- * Storage format
 
--- | A datatype represented as a group of named characteristic relations.
+-- | A named list of characteristic relations.
 type Datatype = (Text, [Relation])
 
--- | A characteristic relation represented as a group of db-tuples.
+-- | A named list of tuples.
 type Relation = (Text, [Tuple])
 
--- | A tuple containing the hash of PK fields and CBOR of all the fields.
+-- | A row with the hash of its PK fields.
 type Tuple = (Digest SHA1, [Field])
 
--- | A field is either a single atom or group of fields.
+-- | CBOR serialized data for a single atom or group of fields. A list of
+-- fields is called a row in identifiers, and a row with the hash of its PK
+-- fields is called a tuple.
 data Field
     = Atom  ByteString Tag
     | Group [Field]
