@@ -117,13 +117,6 @@ loadDatabase
 
 storeRelations :: Git.MonadGit r m => [Output.Relation] -> m (Git.TreeOid r)
 storeRelations
-    -- NOTE_GITATTRIBUTES: We can control the merging of keys and values with
-    -- suffixes:
-    --   .gitattributes := ```
-    --   *.pk merge=binary
-    --   *.val merge=custom-driver
-    --   *.blah merge=blah-driver # hypothetically we might want to give users the option to use existing merge drivers
-    --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (parallel (return . Text.encodeUtf8) storeTuples)
@@ -142,13 +135,6 @@ loadRelations
 
 storeTuples :: Git.MonadGit r m => [Output.Tuple] -> m (Git.TreeOid r)
 storeTuples
-    -- NOTE_GITATTRIBUTES: As an alternative to placing these configs at the
-    -- datatype level, we can place them here by outputting the names of tuple
-    -- columns:
-    --   .gitattributes := ```
-    --   */{pkfilecolumns} merge=binary
-    --   */{valuecolumns} merge=custom-driver
-    --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (parallel storeHash storeRow)
@@ -174,9 +160,6 @@ loadTuples
 
 storeRow :: Git.MonadGit r m => [Output.Field] -> m (Git.TreeOid r)
 storeRow
-    -- NOTE_GITATTRIBUTES: What if a row contains a foreign key? Those are
-    -- subdirectories. Foreign keys are always referring to primary keys which
-    -- don't merge (merge=binary).
     =   Git.createTree
     .   mapM (uncurry Git.putEntry)
     .   map mkName . zip [0::Int ..]
