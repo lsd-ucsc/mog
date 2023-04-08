@@ -29,13 +29,6 @@ import qualified Mog.Output as Output
 
 -- * Storage format to git
 
--- TODO: consider how to store an Output.Database w/o erasing the other trees
--- (Output.Datatype) in the same database
---
--- TODO: storeDatabase :: Git.MonadGit r m => 
-
-
-
 
 -- ** Helpers
 
@@ -99,6 +92,28 @@ data LoadError
     deriving Show
 
 type Option = Either LoadError
+
+-- FIXME: we want to be able to store and load datatypes independenty of each
+-- other, but this is a start
+storeDatabase :: Git.MonadGit r m => [Output.Datatype] -> m (Git.TreeOid r)
+storeDatabase
+    =   Git.createTree
+    .   mapM (uncurry Git.putTree)
+    <=< mapM (parallel (return . Text.encodeUtf8) storeRelations)
+
+-- FIXME: we want to be able to store and load datatypes independenty of each
+-- other, but this is a start
+loadDatabase :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Datatype]
+loadDatabase
+    =   mapM (parallel loadName loadEntryRelations)
+    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.lookupTree)
+   where
+    loadEntryRelations (Git.TreeEntry tid) = loadRelations tid
+    loadEntryRelations  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of relations in a datatype; got a CommitEntry"}
+    loadEntryRelations  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of relations in a datatype; got a BlobEntry"}
+    loadName name = either (throwE . UnicodeException) pure $ Text.decodeUtf8' name
+
 
 storeRelations :: Git.MonadGit r m => [Output.Relation] -> m (Git.TreeOid r)
 storeRelations
