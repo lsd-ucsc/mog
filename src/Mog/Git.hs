@@ -20,7 +20,6 @@ import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Text.Read (readMaybe)
 import Text.Regex.TDFA ((=~~))
-import qualified Data.ByteString.Char8 as Char8 (pack)
 import qualified Data.Text as Text (pack, unpack)
 import qualified Data.Text.Encoding as Text (encodeUtf8, decodeUtf8')
 
@@ -94,7 +93,8 @@ newtype FileExt = FileExt Text
 instance Show FileExt where show (FileExt ext) = '*':'.':Text.unpack ext
 
 data LoadError
-    = UnexpectedCommitTreeEntry
+    = InvalidHash Text
+    | UnexpectedTreeEntry{reason::String}
     | WrongIndex{gotIndex::Int, expectedIndex::Int}
     | InvalidFilename Text
     | UnicodeException UnicodeException
@@ -130,8 +130,26 @@ storeRelation
     --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
-    <=< mapM (sequence . second storeRow)
-    .   fmap (first $ Char8.pack . show) -- XXX: packing a hex-digest of a hash, so Char8.pack should be safe
+    <=< mapM (\(hash, row) -> liftA2 (,) (storeHash hash) (storeRow row))
+  where
+    -- NOTE: Char8.pack might be safe, but it's better to use utf8 explicitly.
+    storeHash = pure . Text.encodeUtf8 . Text.pack . show
+
+loadRelation :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Tuple]
+loadRelation
+    =   mapM (\(name, entry) -> liftA2 (,) (loadHash name) (loadEntryRow entry))
+    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.lookupTree)
+  where
+    loadEntryRow (Git.TreeEntry tid) = loadRow tid
+    loadEntryRow  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry for a row in a relation; got a CommitEntry"}
+    loadEntryRow  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry for a row in a relation; got a BlobEntry"}
+    loadHash name = do
+        -- NOTE: Char8.unpack is unsafe for external data which may not be
+        -- ascii, so we use Text.decodeUtf8' and surface a possible error.
+        t <- either (throwE . UnicodeException) pure $ Text.decodeUtf8' name
+        maybe (throwE $ InvalidHash t) pure . readMaybe $ Text.unpack t
+
 
 storeRow :: Git.MonadGit r m => Output.Row -> m (Git.TreeOid r)
 storeRow
@@ -161,6 +179,7 @@ loadRow
         then return (ext, entry)
         else throwE WrongIndex{gotIndex=i, expectedIndex=index}
 
+
 -- | Write-out serialized column data to create an OID and choose a file name
 -- extension. Atom's use their tag, groups use a made-up extension.
 storeCol :: Git.MonadGit r m => Output.Col -> m (FileExt, Git.TreeEntry r)
@@ -176,4 +195,4 @@ storeCol col = liftA2 (,) (pure $ ext col) (store col)
 loadCol :: Git.MonadGit r m => FileExt -> Git.TreeEntry r -> ExceptT LoadError m Output.Col
 loadCol _             (Git.TreeEntry tid)   = Output.Group <$> loadRow tid
 loadCol (FileExt ext) (Git.BlobEntry bid _) = Output.Atom <$> lift (Git.catBlobLazy bid) <*> return ext
-loadCol _              Git.CommitEntry{}    = throwE UnexpectedCommitTreeEntry
+loadCol _              Git.CommitEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry (Group) or BlobEntry (Atom) for a column in a row; got a CommitEntry"}
