@@ -49,6 +49,14 @@ import qualified Mog.Output as Output
 
 -- ** Helpers
 
+times :: Applicative f => (f a, f b) -> f (a, b)
+times = uncurry (liftA2 (,))
+{-# INLINE times #-}
+
+parallel :: Applicative m => (a -> m b) -> (x -> m y) -> (a, x) -> m (b, y)
+parallel f g = times . bimap f g
+{-# INLINE parallel #-}
+
 -- | Parse utf8 filename. Return index and file extension.
 --
 -- >>> parseName "t0.pk"
@@ -113,8 +121,7 @@ storeDatatype
     --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
-    <=< mapM (sequence . second storeRelation)
-    .   fmap (first Text.encodeUtf8)
+    <=< mapM (parallel (return . Text.encodeUtf8) storeRelation)
     .   snd -- FIXME: currently we just throw out the datatype name
 
 -- | Create a tree OID containing, for each row, a hash of the key mapped to an
@@ -130,14 +137,14 @@ storeRelation
     --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
-    <=< mapM (\(hash, row) -> liftA2 (,) (storeHash hash) (storeRow row))
+    <=< mapM (parallel storeHash storeRow)
   where
     -- NOTE: Char8.pack might be safe, but it's better to use utf8 explicitly.
     storeHash = pure . Text.encodeUtf8 . Text.pack . show
 
 loadRelation :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Tuple]
 loadRelation
-    =   mapM (\(name, entry) -> liftA2 (,) (loadHash name) (loadEntryRow entry))
+    =   mapM (parallel loadHash loadEntryRow)
     <=< (lift . Git.listTreeEntries)
     <=< (lift . Git.lookupTree)
   where
@@ -183,7 +190,7 @@ loadRow
 -- | Write-out serialized column data to create an OID and choose a file name
 -- extension. Atom's use their tag, groups use a made-up extension.
 storeCol :: Git.MonadGit r m => Output.Col -> m (FileExt, Git.TreeEntry r)
-storeCol col = liftA2 (,) (pure $ ext col) (store col)
+storeCol col = parallel (pure . ext) store (col, col)
   where
     ext (Output.Group _)    = FileExt "fk"
     ext (Output.Atom _ tag) = FileExt tag
