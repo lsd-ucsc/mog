@@ -2,12 +2,8 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Module for interacting with a git backend to output/input a
--- 'Output.Database' value to/from disk
---
--- The functions in this module are polymorphic over the "gitlib" backend.
---
--- The naming convention in here is currently following that of the Output module.
+-- | Module for interacting storing/loading the storage format to git. The
+-- functions in this module are polymorphic over the "gitlib" backend.
 module Mog.Git where
 
 import Control.Applicative (liftA2)
@@ -110,8 +106,8 @@ data LoadError
 
 type Option = Either LoadError
 
-storeDatatype :: Git.MonadGit r m => Output.Datatype -> m (Git.TreeOid r)
-storeDatatype
+storeRelations :: Git.MonadGit r m => [Output.Relation] -> m (Git.TreeOid r)
+storeRelations
     -- NOTE_GITATTRIBUTES: We can control the merging of keys and values with
     -- suffixes:
     --   .gitattributes := ```
@@ -121,13 +117,24 @@ storeDatatype
     --   ```
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
-    <=< mapM (parallel (return . Text.encodeUtf8) storeRelation)
-    .   snd -- FIXME: currently we just throw out the datatype name
+    <=< mapM (parallel (return . Text.encodeUtf8) storeTuples)
+
+loadRelations :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Relation]
+loadRelations
+    =   mapM (parallel loadName loadEntryTuples)
+    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.lookupTree)
+   where
+    loadEntryTuples (Git.TreeEntry tid) = loadTuples tid
+    loadEntryTuples  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of tuples in a relation; got a CommitEntry"}
+    loadEntryTuples  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of tuples in a relation; got a BlobEntry"}
+    loadName name = either (throwE . UnicodeException) pure $ Text.decodeUtf8' name
+
 
 -- | Create a tree OID containing, for each row, a hash of the key mapped to an
 -- OID for the value. (Assumption: Key data is already in the value.)
-storeRelation :: Git.MonadGit r m => [Output.Tuple] -> m (Git.TreeOid r)
-storeRelation
+storeTuples :: Git.MonadGit r m => [Output.Tuple] -> m (Git.TreeOid r)
+storeTuples
     -- NOTE_GITATTRIBUTES: As an alternative to placing these configs at the
     -- datatype level, we can place them here by outputting the names of tuple
     -- columns:
@@ -142,15 +149,15 @@ storeRelation
     -- NOTE: Char8.pack might be safe, but it's better to use utf8 explicitly.
     storeHash = pure . Text.encodeUtf8 . Text.pack . show
 
-loadRelation :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Tuple]
-loadRelation
+loadTuples :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Tuple]
+loadTuples
     =   mapM (parallel loadHash loadEntryRow)
     <=< (lift . Git.listTreeEntries)
     <=< (lift . Git.lookupTree)
   where
     loadEntryRow (Git.TreeEntry tid) = loadRow tid
-    loadEntryRow  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry for a row in a relation; got a CommitEntry"}
-    loadEntryRow  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry for a row in a relation; got a BlobEntry"}
+    loadEntryRow  Git.CommitEntry{}  = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of columns in a tuple; got a CommitEntry"}
+    loadEntryRow  Git.BlobEntry{}    = throwE UnexpectedTreeEntry{reason="expecting a TreeEntry of columns in a tuple; got a BlobEntry"}
     loadHash name = do
         -- NOTE: Char8.unpack is unsafe for external data which may not be
         -- ascii, so we use Text.decodeUtf8' and surface a possible error.
