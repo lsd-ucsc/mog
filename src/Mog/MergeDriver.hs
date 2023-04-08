@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Mog.MergeDriver where
 
 import Control.Exception (bracket, assert, throwIO)
@@ -53,7 +54,7 @@ mergeDriverMain args = Socket.withSocketsDo $ do
 
         say $ "sending message"
         cwd <- getCurrentDirectory
-        let request = BSL.toStrict $ serialise MergeRequest{cwd=cwd, args=args{socketPath=""}}
+        let request = BSL.toStrict $ serialise MergeRequest{cwd, args=args{socketPath=""}}
         sent <- SocketBS.send sock request
         assert (sent == BS.length request) $ say "sent message"
 
