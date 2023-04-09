@@ -50,7 +50,7 @@ type Tuple = (Digest SHA1, [Field])
 data Field
     = Atom  ByteString Tag
     | Group [Field]
-    deriving Show
+    deriving (Eq, Ord, Show)
 
 -- | A short string tag indicating the role of a field in a tuple. It is used
 -- as a file extension to control how git handles merge conflicts. Atoms with

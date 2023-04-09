@@ -111,20 +111,20 @@ data LoadError
     | UnicodeException UnicodeException
     deriving Show
 
--- FIXME: we want to be able to store and load datatypes independenty of each
--- other, but this is a start
+-- FIXME: we want to be able to store and load instances of datatypes
+-- independenty of each other, but this is a start
 storeDatabase :: Git.MonadGit r m => [Output.Datatype] -> m (Git.TreeOid r)
 storeDatabase
     =   Git.createTree
     .   mapM (uncurry Git.putTree)
     <=< mapM (parallel (return . Text.encodeUtf8) storeRelations)
 
--- FIXME: we want to be able to store and load datatypes independenty of each
--- other, but this is a start
+-- FIXME: we want to be able to store and load instances of datatypes
+-- independenty of each other, but this is a start
 loadDatabase :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Datatype]
 loadDatabase
     =   mapM (parallel loadName loadEntryRelations)
-    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.listTreeEntries False)
     <=< (lift . Git.lookupTree)
    where
     loadEntryRelations (Git.TreeEntry tid) = loadRelations tid
@@ -142,7 +142,7 @@ storeRelations
 loadRelations :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Relation]
 loadRelations
     =   mapM (parallel loadName loadEntryTuples)
-    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.listTreeEntries False)
     <=< (lift . Git.lookupTree)
    where
     loadEntryTuples (Git.TreeEntry tid) = loadTuples tid
@@ -163,7 +163,7 @@ storeTuples
 loadTuples :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Tuple]
 loadTuples
     =   mapM (parallel (ExceptT . pure . parseTupleName) loadEntryRow)
-    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.listTreeEntries False)
     <=< (lift . Git.lookupTree)
   where
     loadEntryRow (Git.TreeEntry tid) = loadRow tid
@@ -186,7 +186,7 @@ loadRow :: Git.MonadGit r m => Git.TreeOid r -> ExceptT LoadError m [Output.Fiel
 loadRow
     =   mapM (uncurry loadField)
     <=< mapM (uncurry unName) . zip [0::Int ..]
-    <=< (lift . Git.listTreeEntries)
+    <=< (lift . Git.listTreeEntries False)
     <=< (lift . Git.lookupTree)
   where
     liftE = ExceptT . pure
