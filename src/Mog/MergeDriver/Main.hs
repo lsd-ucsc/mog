@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
-module Mog.MergeDriver where
+module Mog.MergeDriver.Main where
 
 import Control.Exception (bracket, assert, throwIO)
 import Data.Text (Text)
