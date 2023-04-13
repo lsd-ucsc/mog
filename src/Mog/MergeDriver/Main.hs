@@ -1,6 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+
+-- | Module for the main-function stub via which git will call back into our
+-- program. This main-function is only a stub because it will pass the data
+-- from git over a socket, wait for a response, and then terminate. The work of
+-- merging is performed in the main process.
 module Mog.MergeDriver.Main where
 
 import Control.Exception (bracket, assert, throwIO)
@@ -10,6 +15,7 @@ import Network.Socket (Socket)
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment)
 import System.Exit (die)
+import System.IO (stderr, hPutStrLn)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Text as Text hiding (Text)
@@ -47,7 +53,7 @@ withMergeDriver userMain = do
 
 mergeDriverMain :: Args -> IO ()
 mergeDriverMain args = Socket.withSocketsDo $ do
-    let say x = putStrLn $ "[merge driver] " ++ x
+    let say x = hPutStrLn stderr $ "[merge driver] " ++ x
     withSock $ \sock -> do
         say $ "connecting"
         Socket.connect sock (Socket.SockAddrUnix $ socketPath args)
