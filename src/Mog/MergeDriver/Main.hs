@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -8,6 +9,7 @@
 -- merging is performed in the main process.
 module Mog.MergeDriver.Main where
 
+import Control.Concurrent (myThreadId)
 import Control.Exception (bracket, assert, throwIO)
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -27,14 +29,18 @@ import Options.Generic (getRecord, getRecordPure)
 
 import Mog.MergeDriver.Args (Args(..))
 
-data Message
+data Request
     = MergeRequest {cwd::FilePath, args::Args}
-    | MergeResult{ok::Bool}
     | AreYouStillThere
+    deriving (Generic, Show)
+
+data Response
+    = MergeResult {ok::Bool}
     | StillAlive
     deriving (Generic, Show)
 
-instance Serialise Message
+instance Serialise Request
+instance Serialise Response
 
 -- | Wrap your main with this, before initializing other resources such as GUI
 -- or sockets.
@@ -55,28 +61,44 @@ mergeDriverMain :: Args -> IO ()
 mergeDriverMain args = Socket.withSocketsDo $ do
     let say x = hPutStrLn stderr $ "[merge driver] " ++ x
     withSock $ \sock -> do
-        say $ "connecting"
+        say "connect"
         Socket.connect sock (Socket.SockAddrUnix $ socketPath args)
 
-        say $ "sending message"
+        say "sending message"
         cwd <- getCurrentDirectory
-        let request = BSL.toStrict $ serialise MergeRequest{cwd, args=args{socketPath=""}}
-        sent <- SocketBS.send sock request
-        assert (sent == BS.length request) $ say "sent message"
+        send sock MergeRequest{cwd, args=args{socketPath=""}}
 
-        say $ "receiving message"
+        say "receive message"
         -- TODO: a background thread to cancel this after a timeout
-        response <- SocketBS.recv sock 4096
-        case deserialiseOrFail $ BSL.fromStrict response of
-            Right MergeResult{ok=True} -> say "done"
-            Right m -> die $ "unexpected response: " ++ show m
-            Left err -> throwIO err
+        recvOrThrow sock >>= \case
+            MergeResult{ok=True} -> say "done"
+            MergeResult{ok=False} -> die "merge failed"
+            StillAlive -> die "unexpected response"
 
 programDescription :: Text
 programDescription = "MoG merge driver - Pass arguments to a running instance of a program using MoG over a unix domain socket."
 
+send :: Serialise a => Socket -> a -> IO ()
+send sock msg = do
+    let raw = BSL.toStrict $ serialise msg
+    sent <- SocketBS.send sock raw
+    assert (sent == BS.length raw) (return ())
+
+recvOrThrow :: Serialise a => Socket -> IO a
+recvOrThrow sock = do
+    raw <- SocketBS.recv sock 4096
+    let em = deserialiseOrFail $ BSL.fromStrict raw
+    either throwIO return em
+
+-- | TODO: define this somewhere else
 withSock :: (Socket -> IO ()) -> IO ()
 withSock =
     bracket
         (Socket.socket Socket.AF_UNIX Socket.Datagram Socket.defaultProtocol)
         Socket.close
+
+-- | TODO: define this somewhere else
+say :: String -> IO ()
+say msg = do
+    me <- myThreadId
+    hPutStrLn stderr $ show me ++ ": " ++ msg
