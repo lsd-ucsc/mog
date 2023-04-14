@@ -32,14 +32,17 @@ requestHandler csoc addr = do
         MergeRequest{cwd,args} -> do
             say $ "todo, merge this: " ++ show (cwd, args)
 
-mergeDriverHandler :: FilePath -> IO ()
-mergeDriverHandler socketPath = do
+withUDLSock :: FilePath -> (Socket -> IO a) -> IO a
+withUDLSock socketPath action =
     withSock $ \lsoc -> do
         say $ "bind " ++ socketPath
         Socket.bind lsoc $ Socket.SockAddrUnix socketPath
         say "listen"
         Socket.listen lsoc 1
-        loop lsoc []
+        action lsoc
+
+mergeDriverHandlerLoop :: Socket -> IO ()
+mergeDriverHandlerLoop s = loop s []
   where
     -- loop mostly blocks inside acceptAsync
     loop lsoc threads =

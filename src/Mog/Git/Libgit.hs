@@ -8,6 +8,9 @@
 -- specifically they use the "gitlib-libgit2" backend.
 module Mog.Git.Libgit where
 
+import Control.Concurrent.Async (withAsync)
+import Control.Exception (Exception, throwIO, bracket)
+import Control.Monad ((<=<))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Bifunctor (bimap)
@@ -20,24 +23,92 @@ import qualified Data.Text.IO as TIO
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TB
 import qualified System.Directory as Dir
+import qualified System.Process as Proc
 
 import qualified Git
 import qualified Git.Libgit2 as GLG2
 import qualified Text.GitConfig.Parser as GCP
 
-
-
+import Mog.MergeDriver.Main (say)
+import Mog.MergeDriver.Handler (withUDLSock, mergeDriverHandlerLoop)
+import Mog.Git.Mutex (PidSymlinkError, withPidSymlink)
 
 -- * Initialization
 
+data StoreError
+    = PathAlreadyExists FilePath
+    | MutexError PidSymlinkError
+    deriving Show
+instance Exception StoreError
+
+-- | How to start up the store?
+--
+--  * 'Init' I don't have a repo on disk yet, and I'm starting a new one.
+--
+--  * 'Clone' I don't have a repo on disk yet, and I'm starting from somebody else's repo.
+--
+--  * 'Open' I do have a repo on disk already.
 data Config
     = Init{local::FilePath}
     | Clone{local::FilePath, origin::String}
     | Open{local::FilePath}
 
--- * Init: I don't have a repo on disk yet, and I'm starting a new one
--- * Clone: I don't have a repo on disk yet, and I'm starting from somebody else's repo
--- * Open: I do have a repo on disk already
+-- | Initialize, clone, or open a store.
+--
+-- Might throw 'StoreError' on initialization.
+withStore :: Config -> ReaderT GLG2.LgRepo IO a -> IO a
+withStore config action = do
+    repoOpts <- liftIO $ case config of
+        Init{}  -> startInitClone
+        Clone{} -> startInitClone
+        Open{}  -> startOpen
+    liftIO
+        -- XXX there's no way to know whether all the downstream actions
+        -- succeeded, and if they didn't then this repo will be left on disk
+        . withRepo    repoOpts $ \repo ->
+          withMutex   (local config </> "mog.pid")
+        . withUDLSock (local config </> "mog.sock") $ \sock ->
+          -- XXX mergeDriverHandlerLoop must be instantiated with a callback
+          -- able to look up merge functions and merge data according to the UI
+          -- types, but so far the user's data is not here?
+          withAsync (mergeDriverHandlerLoop sock) $ \_async ->
+          -- TODO: git config
+          -- TODO: git attributes
+          Git.runRepository GLG2.lgFactory repo
+        $ action
+  where
+    assertLocalPathDoesntExist = do
+        pathExists <- Dir.doesPathExist $ local config
+        if pathExists
+            then throwIO . PathAlreadyExists $ local config
+            else return ()
+    checkRepoIsBare = do
+        gitdirExists <- Dir.doesPathExist $ local config </> ".git"
+        if gitdirExists
+            then say $ "WARNING: won't update working-tree; prefer to use a bare-repo"
+            else return ()
+        return $ not gitdirExists
+    -- Require the "local" path doesn't exist. Auto-create a new bare-repo.
+    startInitClone = do
+        assertLocalPathDoesntExist
+        return Git.RepositoryOptions
+            { Git.repoPath       = local config
+            , Git.repoIsBare     = True
+            , Git.repoAutoCreate = True
+            , Git.repoWorkingDir = Nothing
+            }
+    -- Assume the "local" path exists, do not auto-create. Check whether any
+    -- existing repo is bare.
+    startOpen = do
+        repoIsBare <- checkRepoIsBare
+        return Git.RepositoryOptions
+            { Git.repoPath       = local config
+            , Git.repoIsBare     = repoIsBare
+            , Git.repoAutoCreate = False
+            , Git.repoWorkingDir = Nothing
+            }
+
+
 --
 -- @@
 -- withRepo =
@@ -62,8 +133,12 @@ data Config
 --                     [release: remove associations]
 --     XXXXXXXXXXX user-action
 -- @@
-withRepo :: GLG2.MonadLg m => FilePath -> ReaderT GLG2.LgRepo m a -> m a
-withRepo path action = do
+
+-- | Will create if not existing, could be bare or worktree.
+--
+-- XXX: not used
+withBackendRepo :: GLG2.MonadLg m => FilePath -> ReaderT GLG2.LgRepo m a -> m a
+withBackendRepo path action = do
     notBare <- liftIO . Dir.doesPathExist $ path </> ".git"
     Git.withRepository'
         GLG2.lgFactory
@@ -75,6 +150,16 @@ withRepo path action = do
             }
         action
 
+withRepo :: Git.RepositoryOptions -> (GLG2.LgRepo -> IO a) -> IO a
+withRepo options =
+    bracket
+        (Git.openRepository GLG2.lgFactory options)
+        (\repo -> Git.runRepository GLG2.lgFactory repo Git.closeRepository)
+
+withMutex :: FilePath -> IO a -> IO a
+withMutex path
+    =   either (throwIO . MutexError) return
+    <=< withPidSymlink path
 
 
 -- * Paths

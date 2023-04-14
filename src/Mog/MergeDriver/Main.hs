@@ -91,7 +91,7 @@ recvOrThrow sock = do
     either throwIO return em
 
 -- | TODO: define this somewhere else
-withSock :: (Socket -> IO ()) -> IO ()
+withSock :: (Socket -> IO a) -> IO a
 withSock =
     bracket
         (Socket.socket Socket.AF_UNIX Socket.Datagram Socket.defaultProtocol)
