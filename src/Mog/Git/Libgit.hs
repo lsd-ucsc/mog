@@ -15,7 +15,9 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Bifunctor (bimap)
 import Data.List (intersperse)
+import Data.Tagged (Tagged(..), untag)
 import Data.Text (Text)
+import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
 import qualified Data.HashMap.Strict as HashMap (toList, fromList)
 import qualified Data.Text as Text hiding (Text)
@@ -38,6 +40,8 @@ import Mog.Git.Mutex (PidSymlinkError, withPidSymlink)
 data StoreError
     = PathAlreadyExists FilePath
     | MutexError PidSymlinkError
+    | FetchFailed
+    | FetchSucceededButNoFetchHead
     deriving Show
 instance Exception StoreError
 
@@ -50,7 +54,7 @@ instance Exception StoreError
 --  * 'Open' I do have a repo on disk already.
 data Config
     = Init{local::FilePath}
-    | Clone{local::FilePath, origin::String}
+    | Clone{local::FilePath, origin::Text}
     | Open{local::FilePath}
 
 -- | Initialize, clone, or open a store.
@@ -75,13 +79,20 @@ withStore config action = do
           -- TODO: git config
           -- TODO: git attributes
           Git.runRepository GLG2.lgFactory repo
-        $ action
+        $ do
+        case config of
+            Init{} -> return ()
+            Clone{origin} -> finishClone origin
+            Open{} -> return ()
+        action
   where
+    -- Before the repo is opened, assert it doesn't exist.
     assertLocalPathDoesntExist = do
         pathExists <- Dir.doesPathExist $ local config
         if pathExists
             then throwIO . PathAlreadyExists $ local config
             else return ()
+    -- Before the repo is opened, check if it's a bare repo.
     checkRepoIsBare = do
         gitdirExists <- Dir.doesPathExist $ local config </> ".git"
         if gitdirExists
@@ -97,6 +108,9 @@ withStore config action = do
             , Git.repoAutoCreate = True
             , Git.repoWorkingDir = Nothing
             }
+    finishClone origin = do
+        coid <- fetchHead origin
+        Git.updateReference "HEAD" $ Git.RefObj (untag coid)
     -- Assume the "local" path exists, do not auto-create. Check whether any
     -- existing repo is bare.
     startOpen = do
@@ -134,33 +148,45 @@ withStore config action = do
 --     XXXXXXXXXXX user-action
 -- @@
 
--- | Will create if not existing, could be bare or worktree.
---
--- XXX: not used
-withBackendRepo :: GLG2.MonadLg m => FilePath -> ReaderT GLG2.LgRepo m a -> m a
-withBackendRepo path action = do
-    notBare <- liftIO . Dir.doesPathExist $ path </> ".git"
-    Git.withRepository'
-        GLG2.lgFactory
-        Git.RepositoryOptions
-            { Git.repoPath = path
-            , Git.repoIsBare = not notBare
-            , Git.repoAutoCreate = True
-            , Git.repoWorkingDir = Nothing
-            }
-        action
-
+-- | Wrapper that gives the repo in IO instead of running a reader transformer.
 withRepo :: Git.RepositoryOptions -> (GLG2.LgRepo -> IO a) -> IO a
 withRepo options =
     bracket
         (Git.openRepository GLG2.lgFactory options)
         (\repo -> Git.runRepository GLG2.lgFactory repo Git.closeRepository)
 
+-- | Wrapper for 'withPidSymlink' that throws any errors it returns.
 withMutex :: FilePath -> IO a -> IO a
 withMutex path
     =   either (throwIO . MutexError) return
     <=< withPidSymlink path
 
+-- | Fetch HEAD from a location. The location is passed directly to @git
+-- fetch@, and can be a file-path, url, or a remote.
+--
+-- `git fetch $URL HEAD` fetches HEAD from $URL and stores it in FETCH_HEAD.
+fetchHead :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => Text -> m GLG2.CommitOid
+fetchHead location = do
+    Gitdir repoRoot <- getGitdir
+    -- TODO: handle subprocess errors better
+    -- TODO: find general patterns of how we call subprocesses
+    status <- liftIO
+        . Proc.withCreateProcess
+            (Proc.proc "git" ["fetch", Text.unpack location, "HEAD"])
+            { Proc.cwd = Just repoRoot
+            , Proc.delegate_ctlc = True }
+        $ \Nothing Nothing Nothing -> Proc.waitForProcess
+    case status of
+        ExitSuccess -> do
+            moid <- Git.resolveReference "FETCH_HEAD"
+            case moid of
+                Nothing -> liftIO $ throwIO FetchSucceededButNoFetchHead
+                Just oid -> return $ Tagged oid
+            -- FIXME: to reduce the chance of a race, instead of calling
+            -- resolveReference here: match the given location to the location
+            -- in repoRoot</>FETCH_HEAD and use the OID from there too.
+        ExitFailure{} -> do
+            liftIO $ throwIO FetchFailed
 
 -- * Paths
 
