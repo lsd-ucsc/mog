@@ -35,7 +35,7 @@ requestHandler csoc addr = do
 mergeDriverHandler :: FilePath -> IO ()
 mergeDriverHandler socketPath = do
     withSock $ \lsoc -> do
-        say "bind"
+        say $ "bind " ++ socketPath
         Socket.bind lsoc $ Socket.SockAddrUnix socketPath
         say "listen"
         Socket.listen lsoc 1
