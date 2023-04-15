@@ -307,6 +307,7 @@ setMergeDriver mdID mdM = do
             | otherwise -> return $ Left "not safe to overwrite existing git config"
   where
     match (GCP.Section ["merge", otherID] _) = mdID == otherID
+    match _ = False
     updatedConfig (GitConfig sections) = GitConfig $ case mdM of
         Nothing -> filter (not . match) sections -- XXX filter is "keep"
         Just md -> sections ++ [mergeDriverSection mdID md]
