@@ -9,7 +9,7 @@
 module Mog.Git.Libgit where
 
 import Control.Concurrent.Async (withAsync)
-import Control.Exception (Exception, throwIO, bracket)
+import Control.Exception (Exception, throwIO, bracket, bracket_)
 import Control.Monad ((<=<))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (ReaderT)
@@ -17,6 +17,7 @@ import Data.Bifunctor (bimap)
 import Data.List (intersperse)
 import Data.Tagged (Tagged(..), untag)
 import Data.Text (Text)
+import System.Environment (getExecutablePath)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
 import qualified Data.HashMap.Strict as HashMap (toList, fromList)
@@ -42,6 +43,7 @@ data StoreError
     | MutexError PidSymlinkError
     | FetchFailed
     | FetchSucceededButNoFetchHead
+    | MergeDriverConfigError String
     deriving Show
 instance Exception StoreError
 
@@ -76,9 +78,9 @@ withStore config action = do
           -- able to look up merge functions and merge data according to the UI
           -- types, but so far the user's data is not here?
           withAsync (mergeDriverHandlerLoop sock) $ \_async ->
-          -- TODO: git config
+          withMergeDriver repo
           -- TODO: git attributes
-          Git.runRepository GLG2.lgFactory repo
+        . Git.runRepository GLG2.lgFactory repo
         $ do
         case config of
             Init{} -> return ()
@@ -161,6 +163,32 @@ withMutex path
     =   either (throwIO . MutexError) return
     <=< withPidSymlink path
 
+-- | Bracket to install/uninstall merge driver that throws any errors.
+withMergeDriver :: GLG2.LgRepo -> IO a -> IO a
+withMergeDriver repo action = do
+    executable <- liftIO getExecutablePath
+    let md = mkMD executable $ repoGitdir repo
+        go =   either (throwIO . MergeDriverConfigError) return
+           <=< Git.runRepository GLG2.lgFactory repo
+    bracket_
+        (go $ setMergeDriver mergeDriverId (Just md))
+        (go $ setMergeDriver mergeDriverId Nothing)
+        action
+  where
+    mkMD executable gitdir = MergeDriver
+        { mdName = "The Legend of Melda: A Link Across Versions"
+        , mdRecursiveMD = Nothing
+        , mdCommand = Text.unwords
+            [ Text.pack executable
+            , "--socketPath", Text.pack $ socketPath gitdir
+            , "--mergeAncestor", "%0"
+            , "--currentVersion", "%A"
+            , "--otherBranchVersion", "%B"
+            , "--conflictMarkerSize", "%L"
+            , "--mergedResultPathname", "%P"
+            ]
+        }
+
 -- | Fetch HEAD from a location. The location is passed directly to @git
 -- fetch@, and can be a file-path, url, or a remote.
 --
@@ -212,6 +240,9 @@ socketPath (Gitdir repoRoot) = repoRoot </> "mog.sock"
 -- | Where's the pidfile?
 pidfilePath :: Gitdir -> FilePath
 pidfilePath (Gitdir repoRoot) = repoRoot </> "mog.pid"
+
+mergeDriverId :: Text
+mergeDriverId = "mog-md"
 
 
 
