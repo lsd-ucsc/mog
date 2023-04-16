@@ -70,8 +70,8 @@ withStore config action = do
         -- XXX there's no way to know whether all the downstream actions
         -- succeeded, and if they didn't then this repo will be left on disk
         . withRepo    repoOpts $ \repo ->
-          withMutex   (pidfilePath $ gitdir repo)
-        . withUDLSock (socketPath $ gitdir repo) $ \sock ->
+          withMutex   (pidfilePath $ repoGitdir repo)
+        . withUDLSock (socketPath $ repoGitdir repo) $ \sock ->
           -- XXX mergeDriverHandlerLoop must be instantiated with a callback
           -- able to look up merge functions and merge data according to the UI
           -- types, but so far the user's data is not here?
@@ -194,11 +194,11 @@ newtype Gitdir = Gitdir FilePath
 
 -- | Obtain gitdir in a git monad.
 getGitdir :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m Gitdir
-getGitdir = gitdir <$> Git.getRepository
+getGitdir = repoGitdir <$> Git.getRepository
 
 -- | Extract gitdir from a git repo.
-gitdir :: GLG2.LgRepo -> Gitdir
-gitdir repo =
+repoGitdir :: GLG2.LgRepo -> Gitdir
+repoGitdir repo =
     let opts = GLG2.repoOptions repo in
     Gitdir $
         if Git.repoIsBare opts
