@@ -32,8 +32,8 @@ requestHandler csoc addr = do
         MergeRequest{cwd,args} -> do
             say $ "todo, merge this: " ++ show (cwd, args)
 
-withUDLSock :: FilePath -> (Socket -> IO a) -> IO a
-withUDLSock socketPath action =
+withUnixDomainListeningSocket :: FilePath -> (Socket -> IO a) -> IO a
+withUnixDomainListeningSocket socketPath action =
     withSock $ \lsoc -> do
         say $ "bind " ++ socketPath
         Socket.bind lsoc $ Socket.SockAddrUnix socketPath

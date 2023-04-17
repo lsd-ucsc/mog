@@ -33,7 +33,7 @@ import qualified Git.Libgit2 as GLG2
 import qualified Text.GitConfig.Parser as GCP
 
 import Mog.MergeDriver.Main (say)
-import Mog.MergeDriver.Handler (withUDLSock, mergeDriverHandlerLoop)
+import Mog.MergeDriver.Handler (withUnixDomainListeningSocket, mergeDriverHandlerLoop)
 import Mog.Git.Mutex (PidSymlinkError, withPidSymlink)
 
 -- * Initialization
@@ -68,17 +68,24 @@ withStore config action = do
         Init{}  -> startInitClone
         Clone{} -> startInitClone
         Open{}  -> startOpen
+    -- TODO: audit each of these bracket-pattern functions to make sure we
+    -- throw errors on setup, but only print warnings on teardown; there's no
+    -- point in ruining a users' day on teardown if their action was able to
+    -- produce its result successfully
     liftIO
         -- XXX there's no way to know whether all the downstream actions
         -- succeeded, and if they didn't then this repo will be left on disk
-        . withRepo    repoOpts $ \repo ->
-          withMutex   (pidfilePath $ repoGitdir repo)
-        . withUDLSock (socketPath $ repoGitdir repo) $ \sock ->
+        . withRepo repoOpts
+        $ \repo ->
+          withMutex (pidfilePath $ repoGitdir repo)
+        . withUnixDomainListeningSocket (socketPath $ repoGitdir repo)
+        $ \sock ->
           -- XXX mergeDriverHandlerLoop must be instantiated with a callback
           -- able to look up merge functions and merge data according to the UI
           -- types, but so far the user's data is not here?
-          withAsync (mergeDriverHandlerLoop sock) $ \_async ->
-          withMergeDriver repo
+          withAsync (mergeDriverHandlerLoop sock)
+        $ \_async ->
+          withMogMergeDriverConfig repo
           -- TODO: git attributes
         . Git.runRepository GLG2.lgFactory repo
         $ do
@@ -163,9 +170,9 @@ withMutex path
     =   either (throwIO . MutexError) return
     <=< withPidSymlink path
 
--- | Bracket to install/uninstall merge driver that throws any errors.
-withMergeDriver :: GLG2.LgRepo -> IO a -> IO a
-withMergeDriver repo action = do
+-- | Bracket to install/uninstall merge driver in git-config. Throw any errors encountered while doing so.
+withMogMergeDriverConfig :: GLG2.LgRepo -> IO a -> IO a
+withMogMergeDriverConfig repo action = do
     executable <- liftIO getExecutablePath
     let md = mkMD executable $ repoGitdir repo
         go =   either (throwIO . MergeDriverConfigError) return
