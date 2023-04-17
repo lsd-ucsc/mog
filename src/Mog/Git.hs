@@ -5,7 +5,6 @@
 module Mog.Git where
 
 import Control.Applicative (liftA2)
-import Control.Arrow (first, second)
 import Control.Monad ((<=<))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(..), throwE)

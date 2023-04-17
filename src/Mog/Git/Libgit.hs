@@ -10,6 +10,7 @@ module Mog.Git.Libgit where
 
 import Control.Concurrent.Async (withAsync)
 import Control.Exception (Exception, throwIO, bracket, bracket_)
+import Control.Exception (catch)
 import Control.Monad ((<=<))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (ReaderT)
@@ -19,7 +20,8 @@ import Data.Tagged (Tagged(..), untag)
 import Data.Text (Text)
 import System.Environment (getExecutablePath)
 import System.Exit (ExitCode(..))
-import System.FilePath ((</>))
+import System.FilePath ((</>), (<.>))
+import System.IO.Error (isDoesNotExistError)
 import qualified Data.HashMap.Strict as HashMap (toList, fromList)
 import qualified Data.Text as Text hiding (Text)
 import qualified Data.Text.IO as TIO
@@ -32,6 +34,7 @@ import qualified Git
 import qualified Git.Libgit2 as GLG2
 import qualified Text.GitConfig.Parser as GCP
 
+import Mog.Output (pkTag, valTag)
 import Mog.MergeDriver.Main (say)
 import Mog.MergeDriver.Handler (withUnixDomainListeningSocket, mergeDriverHandlerLoop)
 import Mog.Git.Mutex (PidSymlinkError, withPidSymlink)
@@ -86,7 +89,7 @@ withStore config action = do
           withAsync (mergeDriverHandlerLoop sock)
         $ \_async ->
           withMogMergeDriverConfig repo
-          -- TODO: git attributes
+        . withMogFileExtAttributes repo
         . Git.runRepository GLG2.lgFactory repo
         $ do
         case config of
@@ -197,6 +200,27 @@ withMogMergeDriverConfig repo action = do
             , "--mergedResultPathname", "%P"
             ]
         }
+
+-- | Bracket to (dis)associate file extensions with the mog merge driver.
+--
+-- FIXME: Currently this function replaces any existing attributes file during
+-- the action.
+withMogFileExtAttributes :: GLG2.LgRepo -> IO a -> IO a
+withMogFileExtAttributes repo =
+    bracket_
+        (backup >> associate)
+        restore
+  where
+    attrPath = gitAttributesPath $ repoGitdir repo
+    attrBak = attrPath <.> "bak"
+    backup = Dir.renamePath attrPath attrBak
+        `catch` \e -> if isDoesNotExistError e then return () else throwIO e
+    restore = Dir.renamePath attrBak attrPath
+        `catch` \e -> if isDoesNotExistError e then return () else throwIO e
+    associate = TIO.writeFile attrPath $ Text.unlines
+        [ "*." <> pkTag  <> " merge=binary" -- NOTE: a conflict among primary keys indicates a hash collision for their paths
+        , "*." <> valTag <> " merge=" <> mergeDriverId -- NOTE: these conflicts must be resolved by domain-specific three way merge
+        ]
 
 -- | Fetch HEAD from a location. The location is passed directly to @git
 -- fetch@, and can be a file-path, url, or a remote.
