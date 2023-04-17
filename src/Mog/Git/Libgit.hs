@@ -170,11 +170,12 @@ withMutex path
     =   either (throwIO . MutexError) return
     <=< withPidSymlink path
 
--- | Bracket to install/uninstall merge driver in git-config. Throw any errors encountered while doing so.
+-- | Bracket to (un)install the mog merge driver in git-config. Throw any
+-- errors encountered while doing so.
 withMogMergeDriverConfig :: GLG2.LgRepo -> IO a -> IO a
 withMogMergeDriverConfig repo action = do
     executable <- liftIO getExecutablePath
-    let md = mkMD executable $ repoGitdir repo
+    let md = mkMD executable
         go =   either (throwIO . MergeDriverConfigError) return
            <=< Git.runRepository GLG2.lgFactory repo
     bracket_
@@ -182,7 +183,8 @@ withMogMergeDriverConfig repo action = do
         (go $ setMergeDriver mergeDriverId Nothing)
         action
   where
-    mkMD executable gitdir = MergeDriver
+    gitdir = repoGitdir repo
+    mkMD executable = MergeDriver
         { mdName = "The Legend of Melda: A Link Across Versions"
         , mdRecursiveMD = Nothing
         , mdCommand = Text.unwords
@@ -231,7 +233,7 @@ newtype Gitdir = Gitdir FilePath
 getGitdir :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m Gitdir
 getGitdir = repoGitdir <$> Git.getRepository
 
--- | Extract gitdir from a git repo.
+-- | Extract gitdir from a git repo based on whether the repo is bare.
 repoGitdir :: GLG2.LgRepo -> Gitdir
 repoGitdir repo =
     let opts = GLG2.repoOptions repo in
@@ -240,14 +242,21 @@ repoGitdir repo =
         then Git.repoPath opts
         else Git.repoPath opts </> ".git"
 
--- | Where's the socket?
+gitConfigPath :: Gitdir -> FilePath
+gitConfigPath (Gitdir repoRoot) = repoRoot </> "config"
+
+gitAttributesPath :: Gitdir -> FilePath
+gitAttributesPath (Gitdir repoRoot) = repoRoot </> "info" </> "attributes"
+
+-- | Where's the mog socket?
 socketPath :: Gitdir -> FilePath
 socketPath (Gitdir repoRoot) = repoRoot </> "mog.sock"
 
--- | Where's the pidfile?
+-- | Where's the mog pidfile?
 pidfilePath :: Gitdir -> FilePath
 pidfilePath (Gitdir repoRoot) = repoRoot </> "mog.pid"
 
+-- | What's the git-config identifier for the mog merge driver?
 mergeDriverId :: Text
 mergeDriverId = "mog-md"
 
@@ -261,18 +270,13 @@ newtype GitConfig = GitConfig GCP.GitConfig deriving Eq
 instance Show GitConfig where
     show = Text.unpack . showGitConfig
 
-gitConfigPath :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m FilePath
-gitConfigPath = do
-    Gitdir repoRoot <- getGitdir
-    return $ repoRoot </> "config"
-
 readGitConfig :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => m Text
-readGitConfig = liftIO . TIO.readFile =<< gitConfigPath
+readGitConfig = liftIO . TIO.readFile . gitConfigPath =<< getGitdir
 
 writeGitConfig :: (GLG2.MonadLg m, GLG2.HasLgRepo m) => GitConfig -> m (Either String ())
 writeGitConfig config
     | safeGitConfig config = do
-        path <- gitConfigPath
+        path <- gitConfigPath <$> getGitdir
         liftIO . TIO.writeFile path $ showGitConfig config
         return $ pure ()
     | otherwise = return $ Left "not safe to write new git config"
