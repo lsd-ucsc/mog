@@ -134,32 +134,6 @@ withStore config action = do
             , Git.repoWorkingDir = Nothing
             }
 
-
---
--- @@
--- withRepo =
---     Ini Clo Ope
---     [x] [x] [ ] require the path "local" does not already exist
---     [T] [T] [?] set RepoOptions.IsBare [for open use: not(exists(local/.git)); emit a warning if IsBare is False]
---     [T] [T] [F] set RepoOptions.AutoCreate
---     XXXXXXXXXXX call withRepository'
---                     [DO NOT USE withRepository (takes no options) NOR withNewRepository NOR withNewRepository' (these delete the directory if it is already present)]
---     XXXXXXXXXXX bracket: (mutual exclusion)
---                     [acquire: symlink repo/mog.pid↦PID, read repo/mog.pid, and assert correct; use unix:System.Posix.getProcessID]
---                     [release: delete repo/mog.pid]
---     XXXXXXXXXXX bracket: (merge driver handler)
---                     [acquire: open listening socket]
---                     [release: close socket]
---     XXXXXXXXXXX withAsync (merge driver handler thread)
---     XXXXXXXXXXX bracket: (gitconfig)
---                     [acquire: install merge-driver cli]
---                     [release: uninstall]
---     XXXXXXXXXXX bracket: (gitattributes)
---                     [acquire: (gitattributes) associate pk/val extensions with binary/custom merge drivers (resp)]
---                     [release: remove associations]
---     XXXXXXXXXXX user-action
--- @@
-
 -- | Wrapper that gives the repo in IO instead of running a reader transformer.
 withRepo :: Git.RepositoryOptions -> (GLG2.LgRepo -> IO a) -> IO a
 withRepo options =
@@ -205,6 +179,25 @@ withMogMergeDriverConfig repo action = do
 --
 -- FIXME: Currently this function replaces any existing attributes file during
 -- the action.
+--
+-- We control the merging of keys and values with suffixes:
+--
+-- <gitdir>/info/attributes := ```
+-- *.pk merge=binary
+-- *.val merge=custom-driver
+-- *.blah merge=blah-driver # hypothetically we might want to give users the option to use existing merge drivers
+-- ```
+--
+-- As an alternative to placing these configs at the top level, we could place
+-- them at the relation level by outputting the names of tuple columns:
+-- <tree>/<datatype>/<relation>/.gitattributes := ```
+-- */{pkfilecolumns} merge=binary
+-- */{valuecolumns} merge=custom-driver
+-- ```
+--
+-- What if a row contains a foreign key? Foreign keys are always referring to
+-- primary keys which don't merge (merge=binary). The foreign key will be
+-- represented as a subtree containing primary key columns.
 withMogFileExtAttributes :: GLG2.LgRepo -> IO a -> IO a
 withMogFileExtAttributes repo =
     bracket_
