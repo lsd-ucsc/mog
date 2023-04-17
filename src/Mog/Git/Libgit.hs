@@ -174,8 +174,9 @@ withMutex path
 -- errors encountered while doing so.
 withMogMergeDriverConfig :: GLG2.LgRepo -> IO a -> IO a
 withMogMergeDriverConfig repo action = do
-    executable <- liftIO getExecutablePath
-    let md = mkMD executable
+    execPath <- liftIO . Dir.makeAbsolute =<< getExecutablePath
+    sockPath <- liftIO . Dir.makeAbsolute . socketPath $ repoGitdir repo
+    let md = mkMD execPath sockPath
         go =   either (throwIO . MergeDriverConfigError) return
            <=< Git.runRepository GLG2.lgFactory repo
     bracket_
@@ -183,13 +184,12 @@ withMogMergeDriverConfig repo action = do
         (go $ setMergeDriver mergeDriverId Nothing)
         action
   where
-    gitdir = repoGitdir repo
-    mkMD executable = MergeDriver
+    mkMD exec sock = MergeDriver
         { mdName = "The Legend of Melda: A Link Across Versions"
         , mdRecursiveMD = Nothing
         , mdCommand = Text.unwords
-            [ Text.pack executable
-            , "--socketPath", Text.pack $ socketPath gitdir
+            [ Text.pack exec
+            , "--socketPath", Text.pack sock
             , "--mergeAncestor", "%0"
             , "--currentVersion", "%A"
             , "--otherBranchVersion", "%B"
