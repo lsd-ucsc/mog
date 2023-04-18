@@ -18,7 +18,7 @@ import System.FilePath (splitPath, dropTrailingPathSeparator)
 import qualified Data.Text as Text hiding (Text)
 
 import Mog.Schema
-import Mog.Output (Named(..))
+import Mog.Output (Named(..), RowWidth(..))
 import Mog.Git (LoadError, parseFieldName)
 
 class Mergeable a where
@@ -98,9 +98,10 @@ instance (KnownSymbol name, FindAndMerge pk_v) =>
         | otherwise = error "unreachable: the name should have been validated in the instance for (t & ts)"
 
 -- | We skip the primary keys because those are non-mergeable types.
-instance FindAndMerge v =>
+instance (FindAndMerge v, RowWidth pk) =>
     FindAndMerge (pk ↦ v) where
-    findMerge _ir sp = findMerge @v Proxy sp
+    findMerge _ir sp@SchemaPath{fieldIx=ix} =
+        findMerge @v Proxy sp{fieldIx=ix - rowWidth @pk Proxy}
 
 -- | Similar to the search through @t & ts@ above, here we search through @c %
 -- cs@ by counting down the 'fieldIx' to 0. Again, this requires recursive
