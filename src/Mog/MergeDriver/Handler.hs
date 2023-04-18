@@ -34,7 +34,7 @@ requestHandler schema csoc _addr = do
         theirs <- BSL.readFile (cwd </> otherBranchVersion args)
         path <- either throwIO return $ schemaPath (mergedResultPathname args)
         either throwIO (BSL.writeFile $ cwd </> currentVersion args)
-            $ merge schema path base ours theirs
+            $ findMerge schema path base ours theirs
 
 withUnixDomainListeningSocket :: FilePath -> (Socket -> IO a) -> IO a
 withUnixDomainListeningSocket socketPath action =
