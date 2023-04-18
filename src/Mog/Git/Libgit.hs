@@ -153,8 +153,8 @@ withMutex path
 -- errors encountered while doing so.
 withMogMergeDriverConfig :: GLG2.LgRepo -> IO a -> IO a
 withMogMergeDriverConfig repo action = do
-    execPath <- liftIO . Dir.makeAbsolute =<< getExecutablePath
-    sockPath <- liftIO . Dir.makeAbsolute . socketPath $ repoGitdir repo
+    execPath <- Dir.makeAbsolute =<< getExecutablePath
+    sockPath <- Dir.makeAbsolute . socketPath $ repoGitdir repo
     let md = mkMD execPath sockPath
         go =   either (throwIO . MergeDriverConfigError) return
            <=< Git.runRepository GLG2.lgFactory repo
