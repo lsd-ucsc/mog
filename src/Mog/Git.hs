@@ -64,10 +64,9 @@ parallel f g = times . bimap f g
 --
 -- >>> parseFieldName "0c11d463c749db5838e2c0e489bf869d531e5403.tup"
 -- Left (InvalidFilename "0c11d463c749db5838e2c0e489bf869d531e5403.tup")
-parseFieldName :: Git.TreeFilePath -> Either LoadError (Int, FileExt)
+parseFieldName :: Text -> Either LoadError (Int, FileExt)
 parseFieldName name = do
-    t <- bimap UnicodeException id $ Text.decodeUtf8' name
-    (digits, ext) <- matchName t
+    (digits, ext) <- matchName name
     ix <- maybe (error "bug in regex") pure . readMaybe $ Text.unpack digits
     return (ix, FileExt ext)
   where
@@ -190,7 +189,8 @@ loadRow
   where
     liftE = ExceptT . pure
     unName index (path, entry) = do
-        (i, ext) <- liftE $ parseFieldName path
+        name <- liftE . bimap UnicodeException id $ Text.decodeUtf8' path
+        (i, ext) <- liftE $ parseFieldName name
         if i == index
         then return (ext, entry)
         else throwE WrongIndex{gotIndex=i, expectedIndex=index}
