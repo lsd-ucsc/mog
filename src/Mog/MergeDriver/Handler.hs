@@ -8,29 +8,33 @@ import Control.Concurrent.Async (Async, async, poll)
 import Control.Exception (SomeException, Handler(..), throwIO, catches, mask, finally, onException)
 import Data.Maybe (catMaybes)
 import Network.Socket (Socket, SockAddr)
+import Data.Proxy (Proxy(..))
+import System.FilePath ((</>))
 import qualified Network.Socket as Socket hiding (Socket, SockAddr)
+import qualified Data.ByteString.Lazy as BSL
 
 import Mog.MergeDriver.Args (Args(..))
 import Mog.MergeDriver.Main (Request(..), Response(..), send, recvOrThrow, withSock, say)
+import Mog.MergeDriver.Merge (FindAndMerge(..), schemaPath)
 
--- TODO: This module needs a parameter to represent the domain-specific three
--- way merge.
---
--- * Use `mergedResultPathname` to find a function in the IR type.
--- * Deserialize and do domain-specific three way merge on:
---     `cwd<>mergeAncestor`
---     `cwd<>currentVersion`
---     `cwd<>otherBranchVersion`
--- * Write the result in `cwd<>currentVersion`.
--- * Return success/failure over the socket.
-
-requestHandler :: Socket -> SockAddr -> IO ()
-requestHandler csoc addr = do
+requestHandler :: FindAndMerge s => Proxy s -> Socket -> SockAddr -> IO ()
+requestHandler schema csoc _addr = do
     -- TODO: a background thread to cancel this after a timeout
     recvOrThrow csoc >>= \case
         AreYouStillThere -> send csoc StillAlive
-        MergeRequest{cwd,args} -> do
-            say $ "todo, merge this: " ++ show (cwd, args)
+        MergeRequest{cwd,args} ->
+            (do mergeRequest cwd args
+                send csoc MergeResult{ok=True})
+            `finally`
+                send csoc MergeResult{ok=False}
+  where
+    mergeRequest cwd args = do
+        base <- BSL.readFile (cwd </> mergeAncestor args)
+        ours <- BSL.readFile (cwd </> currentVersion args)
+        theirs <- BSL.readFile (cwd </> otherBranchVersion args)
+        path <- either throwIO return $ schemaPath (mergedResultPathname args)
+        either throwIO (BSL.writeFile $ cwd </> currentVersion args)
+            $ merge schema path base ours theirs
 
 withUnixDomainListeningSocket :: FilePath -> (Socket -> IO a) -> IO a
 withUnixDomainListeningSocket socketPath action =
@@ -41,13 +45,13 @@ withUnixDomainListeningSocket socketPath action =
         Socket.listen lsoc 1
         action lsoc
 
-mergeDriverHandlerLoop :: Socket -> IO ()
-mergeDriverHandlerLoop s = loop s []
+mergeDriverHandlerLoop :: FindAndMerge s => Socket -> Proxy s -> IO ()
+mergeDriverHandlerLoop s schema = loop s []
   where
     -- loop mostly blocks inside acceptAsync
     loop lsoc threads =
         catches
-            ((:) <$> acceptAsync lsoc requestHandler <*> reap threads)
+            ((:) <$> acceptAsync lsoc (requestHandler schema) <*> reap threads)
             [ Handler $ \exc -> do
                 ts <- reap threads
                 if null ts

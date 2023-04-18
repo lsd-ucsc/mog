@@ -10,7 +10,7 @@ data Args = Args
     , currentVersion        :: FilePath -- ^ (CWD RELATIVE PATH) Git docs say: "current version (%A) ... leave the result of the merge in the file named with %A by overwriting it"
     , otherBranchVersion    :: FilePath -- ^ (CWD RELATIVE PATH) Git docs say: "other branches' version (%B)"
     , conflictMarkerSize    :: Int      -- ^ Git docs say: "%L will be replaced with the conflict marker size"
-    , mergedResultPathname  :: FilePath -- ^ (REPO RELATIVE PATH) Git docs say: "the pathname in which the merged result will be stored via placeholder %P"
+    , mergedResultPathname  :: FilePath -- ^ (REPO RELATIVE PATH) Git docs say: "merge driver can learn the pathname in which the merged result will be stored via placeholder %P"
     }
     deriving (Generic, Show)
 
