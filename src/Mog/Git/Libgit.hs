@@ -22,6 +22,7 @@ import System.Environment (getExecutablePath)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>), (<.>))
 import System.IO.Error (isDoesNotExistError)
+import Data.Proxy (Proxy(..))
 import qualified Data.HashMap.Strict as HashMap (toList, fromList)
 import qualified Data.Text as Text hiding (Text)
 import qualified Data.Text.IO as TIO
@@ -37,6 +38,7 @@ import qualified Text.GitConfig.Parser as GCP
 import Mog.Output (pkTag, valTag)
 import Mog.MergeDriver.Main (say)
 import Mog.MergeDriver.Handler (withUnixDomainListeningSocket, mergeDriverHandlerLoop)
+import Mog.MergeDriver.Merge (FindAndMerge(..))
 import Mog.Git.Mutex (PidSymlinkError, withPidSymlink)
 
 -- * Initialization
@@ -65,8 +67,8 @@ data Config
 -- | Initialize, clone, or open a store.
 --
 -- Might throw 'StoreError' on initialization.
-withStore :: Config -> ReaderT GLG2.LgRepo IO a -> IO a
-withStore config action = do
+withStore :: FindAndMerge s => Config -> Proxy s -> ReaderT GLG2.LgRepo IO a -> IO a
+withStore config schema action = do
     repoOpts <- liftIO $ case config of
         Init{}  -> startInitClone
         Clone{} -> startInitClone
@@ -86,7 +88,7 @@ withStore config action = do
           -- XXX mergeDriverHandlerLoop must be instantiated with a callback
           -- able to look up merge functions and merge data according to the UI
           -- types, but so far the user's data is not here?
-          withAsync (mergeDriverHandlerLoop sock)
+          withAsync (mergeDriverHandlerLoop sock schema)
         $ \_async ->
           withMogMergeDriverConfig repo
         . withMogFileExtAttributes repo
