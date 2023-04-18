@@ -119,12 +119,11 @@ testPidSymlink before inner =
 -- * Helpers
 
 withTestRepo :: ReaderT GLG2.LgRepo IO a -> IO a
-withTestRepo action =
-    withTmpDir "repo" $ \dir ->
-        Git.withNewRepository GLG2.lgFactory (dir </> "repo.git")
-            -- XXX: withNewRepository deletes the test repo unless an exception
-            -- occurs; if tests start failing, stop using withTmpDir to debug
-            action
+-- | Deletes the test repo unless an exception occurs.
+withTestRepo action = do
+    dir <- init <$> Proc.readProcess "mktemp" ["--directory", "--tmpdir", "mog-test.repo.XXXXXXX"] ""
+    Git.withNewRepository GLG2.lgFactory dir
+        action
 
 withTmpDir :: String -> (FilePath -> IO a) -> IO a
 withTmpDir tag =
