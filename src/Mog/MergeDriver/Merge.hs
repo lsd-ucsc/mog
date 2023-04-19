@@ -36,6 +36,7 @@ data MergeError
     | FieldNotFound {datatype::Text, relation::Text, field::Text}
     | InvalidFilename LoadError
     | DeserialiseFailure DeserialiseFailure
+    | UnexpectedError{reason::String}
     deriving Show
 instance Exception MergeError
 
@@ -44,7 +45,7 @@ data SchemaPath = SchemaPath
     , relName :: Text
 --  , tupName :: Text
     , fieldName :: Text
-    , fieldIx :: Word
+    , fieldIx :: Int
     } deriving Show
 
 -- |
@@ -55,7 +56,7 @@ schemaPath :: FilePath -> Either MergeError SchemaPath
 schemaPath fp =
     case Text.pack <$> split fp of
         [dtName, relName, _tupName, fieldName] -> do
-            fieldIx <- bimap InvalidFilename (fromIntegral . fst) $ parseFieldName fieldName
+            fieldIx <- bimap InvalidFilename fst $ parseFieldName fieldName
             return SchemaPath{..}
         _ -> Left $ UnexpectedPathComponents fp
   where
@@ -108,8 +109,10 @@ instance (FindAndMerge v, RowWidth pk) =>
 -- class instances in both the head and tail.
 instance (FindAndMerge c, FindAndMerge cs) =>
     FindAndMerge (c % cs) where
-    findMerge _ir sp@SchemaPath{fieldIx=0} = findMerge @c Proxy sp
-    findMerge _ir sp@SchemaPath{fieldIx=ix} = findMerge @cs Proxy sp{fieldIx=ix - 1}
+    findMerge _ir sp@SchemaPath{fieldIx=ix}
+        | 0  < ix   = findMerge @cs Proxy sp{fieldIx=ix - 1}
+        | 0 == ix   = findMerge @c Proxy sp
+        | otherwise = \_ _ _ -> Left UnexpectedError{reason="findMerge: negative fieldIx=" ++ show ix ++"; might result from an improper schema change"}
 instance
     FindAndMerge Ø where
     findMerge _ir SchemaPath{dtName=datatype, relName=relation, fieldName=field} =
