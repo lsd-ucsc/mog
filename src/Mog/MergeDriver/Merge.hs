@@ -21,6 +21,10 @@ import Mog.Schema
 import Mog.Output (Named(..), RowWidth(..))
 import Mog.Git (LoadError, parseFieldName)
 
+-- $setup
+-- >>> import Tutorial
+-- >>> import Mog.Example
+
 class Mergeable a where
     -- | @merge base ours theirs@ is a family of binary merges against a
     -- base. Any @merge base@ is a commutative semigroup for
@@ -66,7 +70,18 @@ type CBOR = ByteString
 type BasedMerge = CBOR -> Merge
 type Merge = CBOR -> CBOR -> Either MergeError CBOR
 
--- | @ordered-map/map/0c11d463c749db5838e2c0e489bf869d531e5403.tup/t1.val@
+-- |
+--
+-- >>> mk   = serialise . Counter :: Int -> CBOR
+-- >>> unmk = deserialise         :: CBOR -> Either MergeError (Counter Int)
+--
+-- >>> Right sp = schemaPath "ordered-map/map/0c11d463c749db5838e2c0e489bf869d531e5403.tup/t1.val"
+-- >>> basedMerge = findMerge @(OrderedMapSchema Char (Counter Int)) Proxy sp
+-- >>> unmk =<< basedMerge (mk 2) (mk 3) (mk 4)
+-- Right (Counter 5)
+-- >>> unmk =<< basedMerge (mk 3) (mk 3) (mk 4)
+-- Right (Counter 4)
+--
 class FindAndMerge s where
     findMerge :: Proxy s -> SchemaPath -> BasedMerge
 
