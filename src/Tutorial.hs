@@ -2,16 +2,36 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Tutorial where
 
+import Codec.Serialise (Serialise)
 import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import Data.Set (Set)
+import GHC.Generics (Generic)
 import qualified Data.List as List
 import qualified Data.Map as Map hiding (Map)
 import qualified Data.Set as Set hiding (Set)
 
 import Mog
+
+
+
+
+-- * Counter
+
+newtype Counter a = Counter a
+    deriving (Eq, Show, Generic)
+
+instance Serialise a => Serialise (Counter a)
+
+-- |
+--
+-- prop> merge (Counter l) (Counter a) (Counter b) == merge (Counter l) (Counter b) (Counter a)
+instance Num a => Mergeable (Counter a) where
+    merge (Counter base) (Counter v1) (Counter v2) =
+        Counter $ base + (v1 - base) + (v2 - base)
 
 
 

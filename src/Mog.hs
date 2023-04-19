@@ -7,10 +7,12 @@ module Mog
     , (::::)(Rel)
     , (:>)
     , (:@)(Ref)
+    , Mergeable(..)
     ) where
 
 import Mog.UI
 import Data.Kind (Type)
+import Mog.MergeDriver.Merge (Mergeable(..))
 
 class {-Relations (Abstracted a) =>-} MRDT a where
     type Abstracted a :: Type
