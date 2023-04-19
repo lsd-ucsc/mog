@@ -121,8 +121,11 @@ instance
 instance (Mergeable a, Serialise a) =>
     FindAndMerge (Prim a) where
     findMerge _ir _sp base ours theirs =
-        let deserialise = bimap DeserialiseFailure id . deserialiseOrFail in
         serialise <$> liftA3 (merge @a)
             (deserialise base)
             (deserialise ours)
             (deserialise theirs)
+
+{-# INLINE deserialise #-}
+deserialise :: Serialise a => CBOR -> Either MergeError a
+deserialise = bimap DeserialiseFailure id . deserialiseOrFail
