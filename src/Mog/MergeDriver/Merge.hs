@@ -111,7 +111,7 @@ instance (FindAndMerge c, FindAndMerge cs) =>
     FindAndMerge (c % cs) where
     findMerge _ir sp@SchemaPath{fieldIx=ix}
         | 0  < ix   = findMerge @cs Proxy sp{fieldIx=ix - 1}
-        | 0 == ix   = findMerge @c Proxy sp
+        | 0 == ix   = findMerge @c  Proxy sp
         | otherwise = \_ _ _ -> Left UnexpectedError{reason="findMerge: negative fieldIx=" ++ show ix ++"; might result from an improper schema change"}
 instance
     FindAndMerge Ø where
