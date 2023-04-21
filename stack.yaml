@@ -42,8 +42,18 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
-  - gitlib-3.1.3
-  - gitlib-libgit2-3.1.2.1
+  - git: https://github.com/jwiegley/gitlib
+    commit: 9d6d2aee8ed6012ea50bbcde80c47ecf83a5a595
+    subdirs:
+      - gitlib
+      - gitlib-libgit2
+  - git-config-0.1.2@sha256:d55dd26f7803004f83c0f107eb38664ae11d8b59e72c0490d41e5aa07ec46b9e,2777
+  - megaparsec-8.0.0@sha256:362f85e243ecbcb550e1de6e5c74ba5a50c09edaa1208c99bc5b9fd242227fc6,3808 # to satisfy git-config
+
+nix:
+  enable: false # set to true on nix-enabled systems
+  packages: [ icu zlib openssl ]
+#allow-newer: true
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
