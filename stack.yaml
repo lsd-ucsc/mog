@@ -17,5 +17,5 @@ extra-deps:
 
 # Nix integration
 nix:
-  enable: true
+  enable: false # set to true on nix-enabled systems
   packages: [ icu zlib openssl ]
