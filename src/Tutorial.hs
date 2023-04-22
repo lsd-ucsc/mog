@@ -7,7 +7,6 @@
 module Tutorial where
 
 import Codec.Serialise (Serialise)
-import Data.Bifunctor (bimap)
 import Data.Map (Map)
 import Data.Set (Set)
 import GHC.Generics (Generic)
@@ -53,34 +52,25 @@ qPop :: Queue a -> Maybe (a, Queue a)
 qPop (Queue []) = Nothing
 qPop (Queue (x:xs)) = Just (x, Queue xs)
 
--- *** Characteristic relations
-
-qRmem :: Ord a => Queue a -> Set a
-qRmem (Queue xs) = Set.fromList xs
-
-qRob :: Ord a => Queue a -> Set (a, a)
-qRob (Queue []) = Set.empty
-qRob (Queue (x:xs)) = Set.fromList $ zip (x:xs) xs
-
 -- ** MRDT
 
 -- TODO: also try the encoding that uses (Int:>a)
 instance (Ord a, MaybeTuple a) => MRDT (Queue a) where
+    -- Type of characteristic relations
     type Abstracted (Queue a) =
         Dt "queue"
         ( "ob"  :::: Set (a:@1, a:@1)
         , "mem" :::: Set a
         )
-    α q = Dt
-        ( Rel . Set.map (bimap Ref Ref) $ qRob q
-        , Rel $ qRmem q
+    -- Abstraction function
+    α (Queue xs) = Dt
+        ( Rel $ case Ref <$> xs of
+                [] -> Set.empty
+                y:ys -> Set.fromList $ zip (y:ys) ys
+        , Rel $ Set.fromList xs
         )
---  α (Queue xs) = Dt
---      ( Rel $ case Ref <$> xs of
---              [] -> Set.empty
---              y:ys -> Set.fromList $ zip (y:ys) ys
---      , Rel $ Set.fromList xs
---      )
+    -- Concretization function
+    γ = undefined
 
 
 
@@ -147,38 +137,23 @@ omPop :: Ord k => OrderedMap k v -> Maybe (OrderedMap k v, k, v)
 omPop OrderedMap{omOrder=[]} = Nothing
 omPop om@OrderedMap{omOrder=(k:_)} = omLookup k om >>= \v -> pure (omDelete k om, k, v)
 
--- *** Characteristic relations
-
-omRord :: Ord k => OrderedMap k v -> Set (k, k)
-omRord OrderedMap{omOrder=[]} = Set.empty
-omRord OrderedMap{omOrder=(k:ks)} = Set.fromList $ zip (k:ks) ks
-
-omRmap :: OrderedMap k v -> Map k v
-omRmap = omMap
-
-omRkeys :: OrderedMap k v -> Set k
-omRkeys = Map.keysSet . omMap
-
 -- ** MRDT
 
 instance (Ord k, MaybeTuple k, MaybeTuple v) => MRDT (OrderedMap k v) where
-
+    -- Type of characteristic relations
     type Abstracted (OrderedMap k v) =
         Dt "ordered-map"
         ( "ord"  :::: Set (k:@2, k:@2)
         , "map"  :::: k:@1 :> v
         , "keys" :::: Set k
         )
-
+    -- Abstraction function
     α om = Dt
-        ( Rel . Set.map (bimap Ref Ref) $ omRord om
-        , Rel . Map.mapKeys Ref $ omMap om
-        , Rel $ omRkeys om
+        ( Rel $ case Ref <$> omOrder om of
+                [] -> Set.empty
+                k:ks -> Set.fromList $ zip (k:ks) ks
+        , Rel $ Map.mapKeys Ref $ omMap om
+        , Rel $ Map.keysSet $ omMap om
         )
---  α om = Dt
---      ( Rel $ case Ref <$> omOrder om of
---              [] -> Set.empty
---              k:ks -> Set.fromList $ zip (k:ks) ks
---      , Rel $ Map.mapKeys Ref $ omMap om
---      , Rel $ Map.keysSet $ omMap om
---      )
+    -- Concretization function
+    γ = undefined
