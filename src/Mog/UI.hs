@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 -- FIXME: undecidable-instances here lets us convert to our hetlist.
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
 module Mog.UI where
 
 import Data.Bifunctor (bimap)
@@ -58,6 +59,14 @@ newtype a :@ (index :: Nat) = Ref a
 _testPrec10 ::  "mapping" ::::   k:@1  :> v
             :~: "mapping" :::: ((k:@1) :> v)
 _testPrec10 = Refl
+
+-- | Your type might be a tuple, and its tupled-form has the required UI
+-- instance. This constraint requires UndecidableInstances but we don't think
+-- that causes problems compiling.
+type MaybeTuple a =
+    ( ToTupleList (IsTuple a) a
+    , ColsC (TupleList (TupleOf (IsTuple a) a))
+    )
 
 
 
@@ -139,8 +148,7 @@ instance (RelC pk_v) => RelC (name :::: pk_v) where
     relUser = Rel . relUser
 instance
         ( Ord pk
-        , ToTupleList b pk -- UndecidableInstances (variable not in head)
-        , ColsC (TupleList (TupleOf b pk)) -- UndecidableInstances (nesting)
+        , MaybeTuple pk
         ) =>
     RelC (Set pk) where
     -- XXX could go via map, but would reconstruct the tree structure
@@ -165,10 +173,8 @@ instance
 -- True
 instance
         ( Ord pk
-        , ToTupleList b₁ pk -- UndecidableInstances (variable not in head)
-        , ToTupleList b₂ v  -- UndecidableInstances (variable not in head)
-        , ColsC (TupleList (TupleOf b₁ pk)) -- UndecidableInstances (nesting)
-        , ColsC (TupleList (TupleOf b₂ v))  -- UndecidableInstances (nesting)
+        , MaybeTuple pk
+        , MaybeTuple v
         ) =>
     RelC (pk :> v) where
     relInst

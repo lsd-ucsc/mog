@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE UndecidableInstances #-} -- MaybeTuple constraint
 module Tutorial where
 
 import Codec.Serialise (Serialise)
@@ -64,7 +65,7 @@ qRob (Queue (x:xs)) = Set.fromList $ zip (x:xs) xs
 -- ** MRDT
 
 -- TODO: also try the encoding that uses (Int:>a)
-instance Ord a => MRDT (Queue a) where
+instance (Ord a, MaybeTuple a) => MRDT (Queue a) where
     type Abstracted (Queue a) =
         Dt "queue"
         ( "ob"  :::: Set (a:@1, a:@1)
@@ -160,7 +161,7 @@ omRkeys = Map.keysSet . omMap
 
 -- ** MRDT
 
-instance (Ord k{-, MRDT v-}) => MRDT (OrderedMap k v) where
+instance (Ord k, MaybeTuple k, MaybeTuple v) => MRDT (OrderedMap k v) where
 
     type Abstracted (OrderedMap k v) =
         Dt "ordered-map"

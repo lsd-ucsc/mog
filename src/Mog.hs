@@ -8,13 +8,14 @@ module Mog
     , (:>)
     , (:@)(Ref)
     , Mergeable(..)
+    , MaybeTuple
     ) where
 
-import Mog.UI
 import Data.Kind (Type)
+import Mog.UI
 import Mog.MergeDriver.Merge (Mergeable(..))
 
-class {-Relations (Abstracted a) =>-} MRDT a where
+class (DtC (Abstracted a)) => MRDT a where
     type Abstracted a :: Type
     α :: a -> Abstracted a
     γ :: Abstracted a -> a
