@@ -3,8 +3,8 @@
 
 -- | Module for UI/UX reexports.
 module Mog
-    -- * The MRDT typeclass
-    ( MRDT(..)
+    ( -- * The MRDT typeclass
+      MRDT(..)
     -- ** Constraints for constituent types
     , MaybeTuple
     , Mergeable(..)

@@ -143,5 +143,3 @@ instance TupleListSize () where
 instance TupleListSize xs => TupleListSize (x, xs) where
     sizeTL (_,xs) = 1 + sizeTL xs
     sizeTLp _ = 1 + sizeTLp @xs Proxy
-
--- TODO: write down constraints that callers will need to use
