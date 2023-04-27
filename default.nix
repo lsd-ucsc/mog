@@ -24,11 +24,11 @@ let
   gitlib-libgit2 = haskellPackages.callCabal2nix "gitlib-libgit2" "${gitlib-src}/gitlib-libgit2" { inherit gitlib; inherit gitlib-test; };
   # package
   src = pkgs.nix-gitignore.gitignoreSource [ "*.cabal" "dist/" "*.nix" "result" ] ./.;
-  drv = haskellPackages.callCabal2nix "mog" src (rec {
-    git-config = with pkgs.haskell.lib; doJailbreak (dontCheck (markUnbroken haskellPackages.git-config));
+  drv = haskellPackages.callCabal2nix "mog" src {
     inherit gitlib;
     inherit gitlib-libgit2;
-  });
+    git-config = with pkgs.haskell.lib; doJailbreak (dontCheck (markUnbroken haskellPackages.git-config));
+  };
   env = drv.envFunc { withHoogle = true; };
 in
 
