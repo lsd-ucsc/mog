@@ -1,1 +1,1 @@
-import ./. rec { shell = true; }
+import ./. { shell = true; }
