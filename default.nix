@@ -12,17 +12,23 @@ let
   ghc = "ghc810";
   haskellPackages = pkgs.haskell.packages.${ghc};
   withNativeInputs = pkgs: d: d.overrideAttrs (old: { nativeBuildInputs = old.nativeBuildInputs ++ pkgs; });
+  # deps
+  gitlib-src = pkgs.fetchFromGitHub {
+    owner = "jwiegley";
+    repo = "gitlib";
+    rev = "9d6d2aee8ed6012ea50bbcde80c47ecf83a5a595";
+    sha256 = "055n0g4s6bcrhagm9np1jhvpavcpni3anpfqw9x8c4rxwk0f2ywi";
+  };
+  gitlib = haskellPackages.callCabal2nix "gitlib" "${gitlib-src}/gitlib" {};
+  gitlib-test = haskellPackages.callCabal2nix "gitlib-test" "${gitlib-src}/gitlib-test" { inherit gitlib; };
+  gitlib-libgit2 = haskellPackages.callCabal2nix "gitlib-libgit2" "${gitlib-src}/gitlib-libgit2" { inherit gitlib; inherit gitlib-test; };
   # package
   src = pkgs.nix-gitignore.gitignoreSource [ "*.cabal" "dist/" "*.nix" "result" ] ./.;
-  drv = haskellPackages.callCabal2nix "mog" src {
-    gitlib-libgit2 = pkgs.fetchFromGitHub {
-      owner = "jwiegley";
-      repo = "gitlib";
-      rev = "9d6d2aee8ed6012ea50bbcde80c47ecf83a5a595";
-      sha256 = "0000000000000000000000000000000000000000000000000000";
-    };
+  drv = haskellPackages.callCabal2nix "mog" src (rec {
     git-config = with pkgs.haskell.lib; doJailbreak (dontCheck (markUnbroken haskellPackages.git-config));
-  };
+    inherit gitlib;
+    inherit gitlib-libgit2;
+  });
   env = drv.envFunc { withHoogle = true; };
 in
 
